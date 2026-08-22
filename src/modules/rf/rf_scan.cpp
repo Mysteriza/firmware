@@ -88,9 +88,7 @@ void RFScan::loop() {
 
         while (frequency <= 0) { // FastScan
             if (EscPress || exitRequested) {
-                RF_DBG(
-                    "RFScan fast-scan exit: esc=%d exitRequested=%d", (int)EscPress, (int)exitRequested
-                );
+                RF_DBG("RFScan fast-scan exit: esc=%d exitRequested=%d", (int)EscPress, (int)exitRequested);
                 check(EscPress);
                 return;
             }
@@ -111,10 +109,12 @@ void RFScan::loop() {
             bool captured = false;
             if (!ReadRAW) {
                 captured = decode_signal(durations);
-                if (captured && autoSave && (lastSavedKey != received.key || received.key == 0)) save_signal();
+                if (captured && autoSave && (lastSavedKey != received.key || received.key == 0))
+                    save_signal();
             } else {
                 captured = read_raw(durations);
-                if (captured && autoSave && (lastSavedKey != received.key || received.key == 0)) save_signal();
+                if (captured && autoSave && (lastSavedKey != received.key || received.key == 0))
+                    save_signal();
             }
             if (captured && bruceConfigPins.rfModule == M5_RF_MODULE) {
                 _rx.end();
@@ -317,8 +317,7 @@ bool RFScan::read_raw(const std::vector<int> &durations) {
     }
     // no decode, but a repeated pattern gave us a CRC
     else if (hasCrc) {
-        if (bruceConfigPins.rfModule == M5_RF_MODULE &&
-            !rf_m5_raw_is_plausible(hasCrc, rawBits, rawTe)) {
+        if (bruceConfigPins.rfModule == M5_RF_MODULE && !rf_m5_raw_is_plausible(hasCrc, rawBits, rawTe)) {
             RF_DBG(
                 "m5 raw discard: crc=%d bits=%d te=%d minBits=%d minTe=%d",
                 (int)hasCrc,
@@ -875,9 +874,10 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
             String subfile_out = rf_subghz_header(frequency);
             if (!outRaw) {
                 subfile_out += "Preset: " + String(received.preset) + "\n";
-                subfile_out +=
-                    "Protocol: " +
-                    (received.protocol == "" ? String("RcSwitch") : rf_flipper_protocol_name(received.protocol)) + "\n";
+                subfile_out += "Protocol: " +
+                               (received.protocol == "" ? String("RcSwitch")
+                                                        : rf_flipper_protocol_name(received.protocol)) +
+                               "\n";
                 subfile_out += "Bit: " + String(received.Bit) + "\n";
                 subfile_out += "Key: " + String(hexString) + "\n";
                 if (received.hop != 0 || received.serial != 0 || received.cnt != 0) {
