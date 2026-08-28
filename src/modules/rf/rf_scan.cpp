@@ -209,6 +209,35 @@ bool RFScan::fast_scan() {
     vTaskDelay(5 / portTICK_PERIOD_MS);
     rssi = ELECHOUSE_cc1101.getRssi();
     if (rssi > rssiThreshold) {
+        // Strong carrier here: dwell long enough to receive a full frame, then
+        // try to capture it. A single valid frame is enough to lock on, so the
+        // user no longer has to press the remote twice. Frames that fail to
+        // decode (or RAW frames without a CRC) are rejected so noise fragments
+        // are never stored as "signals".
+        unsigned long dwellUntil = millis() + 30;
+        bool captured = false;
+        while (millis() < dwellUntil) {
+            std::vector<int> durations;
+            if (_rx.poll(durations)) {
+                if (!ReadRAW) {
+                    captured = decode_signal(durations);
+                } else {
+                    captured = read_raw(durations);
+                    if (captured && received.key == 0) captured = false; // RAW without CRC = noise
+                }
+                if (captured) break;
+            }
+            vTaskDelay(2 / portTICK_PERIOD_MS);
+        }
+        if (captured) {
+            bruceConfigPins.setRfFreq(checkFrequency, 1); // lock as fixed frequency
+            frequency = checkFrequency;
+            Serial.println("Frequency Found: " + String(frequency));
+            return true;
+        }
+
+        // No decodable frame yet, but the carrier is strong: keep this as a
+        // candidate and continue sweeping until we have enough hits.
         _freqs[_try].freq = checkFrequency;
         _freqs[_try].rssi = rssi;
         _try++;
