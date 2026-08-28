@@ -15,7 +15,6 @@ void rf_waterfall() {
         return;
     }
 
-    ELECHOUSE_cc1101.setRxBW(200);
     int option, idx = 0;
 select:
 
@@ -71,6 +70,9 @@ void rf_waterfall_run() {
 
     int current_line = display_top;
     initRfModule("rx", f_start);
+    // re-apply wide RX bandwidth: initRfModule resets it to the narrow preset,
+    // which makes the sweep nearly deaf for waterfall purposes
+    ELECHOUSE_cc1101.setRxBW(200);
 
     float max_freq = f_start;
     int max_rssi = -100;
@@ -123,6 +125,11 @@ void rf_waterfall_run() {
                 tft.drawPixel(0, 0, 0);
                 delayMicroseconds(150); // T-Embed case, need more time to process
             } else delayMicroseconds(100);
+            // When rfFxdFreq is set, the setMHZ() wrapper runs sidle -> recal ->
+            // SetRx on every call; the PLL needs a few ms to settle, otherwise
+            // getRssi() returns a stale mid-scale value and the waterfall stays
+            // a flat color with no reaction to real signals.
+            vTaskDelay(pdMS_TO_TICKS(bruceConfigPins.rfFxdFreq ? 3 : 0));
 
             int i_rssi = ELECHOUSE_cc1101.getRssi();
             // To make sure CC1101 shared with TFT works properly on T-Embed
