@@ -2464,3 +2464,54 @@ bool drawPNG(FS &fs, const String &filename, int x, int y, bool center) {
     return false;
 }
 #endif
+
+/***************************************************************************************
+** Function name: listFiles
+** Description:   Draw the SD/LittleFS file list (restored pre-loopOptions renderer used by loopSD)
+***************************************************************************************/
+#ifndef SD_LIST_MAX_ITEMS
+#define SD_LIST_MAX_ITEMS (int)(tftHeight - 20) / (LH * FM)
+#endif
+Opt_Coord listFiles(int index, std::vector<FileList> fileList) {
+    Opt_Coord coord;
+    tft.drawPixel(0, 0, bruceConfig.bgColor);
+    if (index == 0) {
+        tft.fillScreen(bruceConfig.bgColor);
+        tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
+    }
+    tft.setCursor(10, 10);
+    tft.setTextSize(FM);
+    int i = 0;
+    int arraySize = fileList.size();
+    int start = 0;
+    if (index >= SD_LIST_MAX_ITEMS) {
+        start = index - SD_LIST_MAX_ITEMS + 1;
+        if (start < 0) start = 0;
+    }
+    int nchars = (tftWidth - 20) / (6 * tft.getTextSize());
+    String txt = ">";
+    while (i < arraySize) {
+        if (i >= start) {
+            tft.setCursor(10, tft.getCursorY());
+            if (fileList[i].folder == true)
+                tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
+            else if (fileList[i].operation == true) tft.setTextColor(ALCOLOR, bruceConfig.bgColor);
+            else { tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor); }
+
+            if (index == i) {
+                txt = ">";
+                coord.x = 10 + FM * LW;
+                coord.y = tft.getCursorY();
+                coord.size = nchars;
+                coord.fgcolor =
+                    fileList[i].folder ? getColorVariation(bruceConfig.priColor) : bruceConfig.priColor;
+                coord.bgcolor = bruceConfig.bgColor;
+            } else txt = " ";
+            txt += fileList[i].filename + "                 ";
+            tft.println(txt.substring(0, nchars));
+        }
+        i++;
+        if (i == (start + SD_LIST_MAX_ITEMS) || i == arraySize) break;
+    }
+    return coord;
+}

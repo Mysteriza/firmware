@@ -35,6 +35,7 @@ struct Opt_Coord {
     uint16_t fgcolor = bruceConfig.priColor;
     uint16_t bgcolor = bruceConfig.bgColor;
 };
+Opt_Coord listFiles(int index, std::vector<FileList> fileList);
 void displayScrollingText(const String &text, Opt_Coord &coord, bool highlight = false);
 
 #if !defined(LITE_VERSION)
