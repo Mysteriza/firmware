@@ -117,6 +117,13 @@ struct Option {
     uint16_t x = 0, y = 0, w = 0, h = 0;
     bool contain(int px, int py) const { return px >= x && px < x + w && py >= y && py < y + h; }
 
+    // Optional trailing icons drawn by loopOptions (opt-in; both default to
+    // "off" so existing menus are unchanged):
+    //   iconRssi != 0 -> four-bar signal meter for that dBm value
+    //   iconLock: 0 none, 1 locked/secured, 2 open
+    int iconRssi = 0;
+    uint8_t iconLock = 0;
+
     Option(
         const char *lbl, const std::function<void()> &op, bool sel = false,
         bool (*hov)(void *hoverPointer, bool shouldRender) = nullptr, void *ptr = nullptr, bool hvrd = false,
