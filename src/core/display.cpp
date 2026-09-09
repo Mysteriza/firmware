@@ -549,12 +549,6 @@ int loopOptions(
 ) {
     if (options.empty()) return -1;
 
-    bool useTapToSelect = menuType == MENU_TYPE_REGULAR ||
-                          (bruceConfig.mainMenuStyle == MAIN_MENU_GRID && menuType == MENU_TYPE_MAIN);
-
-    bool prevTouchZoneOutsideFooterEnabled = touchZoneOutsideFooterEnabled;
-    if (useTapToSelect) touchZoneOutsideFooterEnabled = false;
-
     auto findFirstEnabled = [&]() -> int {
         for (size_t i = 0; i < options.size(); i++) {
             if (options[i].enabled) return static_cast<int>(i);
@@ -611,13 +605,6 @@ int loopOptions(
     bool firstRender = true;
     unsigned long menuOpenTs =
         0; // timestamp when this menu was first rendered (per-invocation, not shared across nested menus)
-#if defined(HAS_TOUCH)
-    bool showEscButton = useTapToSelect && menuType == MENU_TYPE_REGULAR;
-    const int escW = 5 * LW * FM + 4;
-    const int escH = LH * FM + 4;
-    const int escX = tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - 2 - escW;
-    const int escY = BORDER_OFFSET_FROM_SCREEN_EDGE + 2;
-#endif
     drawMainBorder();
     while (1) {
         // Check for shutdown before drawing menu to avoid drawing a black bar on the screen
@@ -663,14 +650,6 @@ int loopOptions(
             redraw = false;
         }
 
-#if defined(HAS_TOUCH)
-        // Tap the "[ x ]" close button to fire EscPress, same as the top-left zone used to.
-        if (showEscButton && touchPoint.pressed && touchPoint.x >= escX && touchPoint.x < escX + escW &&
-            touchPoint.y >= escY && touchPoint.y < escY + escH) {
-            EscPress = true;
-            touchPoint.pressed = false;
-        }
-#endif
 
         // handleSerialCommands(); // always use serial task for it
 #ifdef HAS_KEYBOARD
@@ -853,7 +832,6 @@ int loopOptions(
     }
 
     RotaryNetSteps = 0; // reset rotary steps to avoid unexpected jumps in the next menu
-    touchZoneOutsideFooterEnabled = prevTouchZoneOutsideFooterEnabled;
     return index;
 }
 
@@ -993,36 +971,12 @@ Opt_Coord drawOptions(
         else last_index = menuSize - 1;            // from last to first
     }
 
-    // Scrolled-out items keep a stale tap rect otherwise; clear before repopulating the visible ones.
-    for (auto &opt : options) {
-        opt.w = 0;
-        opt.h = 0;
-    }
-
-#if defined(HAS_TOUCH)
-    if (showPageUp) {
-        int16_t cursorY = tft.getCursorY();
-        tft.fillRect(boxX + 2, cursorY, boxW - 4, FM * LH + 4, bgcolor);
-        tft.setTextColor(getColorVariation(fgcolor), bgcolor);
-        tft.drawCentreString("-- Page Up --", boxX + boxW / 2, cursorY + 4, 1);
-        s_pageUpVisible = true;
-        s_pageUpX = boxX;
-        s_pageUpY = cursorY;
-        s_pageUpW = boxW;
-        s_pageUpH = FM * LH + 4;
-        tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, cursorY + FM * LH + 4);
-        tft.setTextColor(fgcolor, bgcolor);
-    }
-#endif
 
     cont = 1;
     for (i = 0; i < options.size(); i++) {
         if (i >= init) {
             int16_t cursorY = tft.getCursorY();
-            options[i].x = boxX;
-            options[i].y = cursorY;
-            options[i].w = boxW;
-            options[i].h = FM * LH + 4;
+
             // Erase previously highlited element,
             if (i == last_index) {
                 tft.fillRoundRect(boxX + 2, cursorY + 2, boxW - 4, FM * LH + 2, 3, bruceConfig.bgColor);
@@ -1108,11 +1062,7 @@ Opt_Coord drawOptions(
     // update history
     last_index = index;
 #if defined(HAS_TOUCH)
-    int escW = 5 * LW * FM + 4;
-    int escX = tftWidth - BORDER_OFFSET_FROM_SCREEN_EDGE - 2 - escW;
-    tft.setTextColor(getColorVariation(bruceConfig.priColor), bgcolor);
-    tft.setTextSize(FM);
-    tft.drawString("[ x ]", escX, BORDER_OFFSET_FROM_SCREEN_EDGE + 2, 1);
+
     TouchFooter();
 #endif
     return coord;

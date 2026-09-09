@@ -56,7 +56,6 @@ volatile int EncoderLedChange = 0;
 #endif
 
 TouchPoint touchPoint;
-volatile bool touchZoneOutsideFooterEnabled = true;
 
 keyStroke KeyStroke;
 
