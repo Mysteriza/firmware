@@ -203,7 +203,7 @@ void IrRead::begin() {
 
 void IrRead::cls() {
     drawMainBorder();
-    tft.setCursor(BORDER_PAD_X, BORDER_PAD_Y);
+    tft.setCursor(10, 28);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 }
 

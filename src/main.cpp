@@ -156,8 +156,7 @@ tft_sprite draw = tft_sprite(&tft);
 volatile int tftWidth = TFT_HEIGHT;
 #ifdef HAS_TOUCH
 volatile int tftHeight =
-    TFT_WIDTH - TOUCH_FOOTER_HEIGHT; // reserved to draw the TouchFooter(), were the btns are being read in
-                                      // touch devices.
+    TFT_WIDTH - 20; // 20px to draw the TouchFooter(), were the btns are being read in touch devices.
 #else
 volatile int tftHeight = TFT_WIDTH;
 #endif
@@ -258,7 +257,7 @@ void begin_tft() {
     tft.setRotation(bruceConfigPins.rotation);
     tftWidth = tft.width();
 #ifdef HAS_TOUCH
-    tftHeight = tft.height() - TOUCH_FOOTER_HEIGHT;
+    tftHeight = tft.height() - 20;
 #else
     tftHeight = tft.height();
 #endif

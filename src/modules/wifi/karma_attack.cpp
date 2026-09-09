@@ -3645,9 +3645,9 @@ void karma_setup() {
             std::vector<Option> options = {
                 {"Enhanced Stats", [&]() {
                      drawMainBorderWithTitle("ADVANCED STATS");
-                     int y = BORDER_PAD_Y;
-                     tft.setTextSize(FP);
-                     tft.setCursor(BORDER_PAD_X, y);
+                     int y = 45;
+                     tft.setTextSize(1);
+                     tft.setCursor(10, y);
                      padprint("Total: " + String(totalProbes));
                      padprintln("Unique: " + String(uniqueClients), 10);
                      padprint("Karma: " + String(karmaResponsesSent));
@@ -3842,24 +3842,20 @@ void karma_setup() {
                           }},
                          {"Database Info", [&]() {
                               drawMainBorderWithTitle("SSID DATABASE");
-                              int rowStep = LH * FP + 7;
-                              int y = BORDER_PAD_Y + FM * LH;
-                              tft.setTextSize(FP);
-                              tft.fillRect(
-                                  BORDER_PAD_X, y - LH * FP, tftWidth - 2 * BORDER_PAD_X, 3 * rowStep + LH * FP,
-                                  bruceConfig.bgColor
-                              );
+                              int y = 60;
+                              tft.setTextSize(1);
+                              tft.fillRect(10, 40, tftWidth - 20, 100, bruceConfig.bgColor);
                               size_t total = SSIDDatabase::getCount();
-                              tft.setCursor(BORDER_PAD_X, y);
-                              y += rowStep;
+                              tft.setCursor(10, y);
+                              y += 15;
                               tft.print("Total SSIDs: " + String(total));
-                              tft.setCursor(BORDER_PAD_X, y);
-                              y += rowStep;
+                              tft.setCursor(10, y);
+                              y += 15;
                               tft.print("Cached: streaming");
-                              tft.setCursor(BORDER_PAD_X, y);
-                              y += rowStep;
+                              tft.setCursor(10, y);
+                              y += 15;
                               tft.print("Progress: " + broadcastAttack.getProgressString());
-                              tft.setCursor(BORDER_PAD_X, tftHeight - BORDER_PAD_X - LH * FP);
+                              tft.setCursor(10, tftHeight - 20);
                               tft.print("Sel: Back");
                               while (!check(SelPress) && !check(EscPress)) delay(50);
                           }},
@@ -4039,32 +4035,31 @@ void karma_setup() {
                      broadcastOptions.push_back(
                          {"Show Stats", [&]() {
                               drawMainBorderWithTitle("BROADCAST STATS");
-                              int rowStep = LH * FP + 7;
-                              int y = BORDER_PAD_Y;
-                              tft.setTextSize(FP);
+                              int y = 40;
+                              tft.setTextSize(1);
                               size_t totalSSIDs = SSIDDatabase::getCount();
                               size_t currentPos = broadcastAttack.getCurrentPosition();
                               float progress = broadcastAttack.getProgressPercent();
                               BroadcastStats stats = broadcastAttack.getStats();
 
-                              tft.setCursor(BORDER_PAD_X, y);
-                              y += rowStep;
+                              tft.setCursor(10, y);
+                              y += 15;
                               tft.print("Total SSIDs: " + String(totalSSIDs));
-                              tft.setCursor(BORDER_PAD_X, y);
-                              y += rowStep;
+                              tft.setCursor(10, y);
+                              y += 15;
                               tft.print("Progress: " + String(progress, 1) + "%");
-                              tft.setCursor(BORDER_PAD_X, y);
-                              y += rowStep;
+                              tft.setCursor(10, y);
+                              y += 15;
                               tft.print("Broadcasts: " + String(stats.totalBroadcasts));
-                              tft.setCursor(BORDER_PAD_X, y);
-                              y += rowStep;
+                              tft.setCursor(10, y);
+                              y += 15;
                               tft.print("Responses: " + String(stats.totalResponses));
-                              tft.setCursor(BORDER_PAD_X, y);
-                              y += rowStep;
+                              tft.setCursor(10, y);
+                              y += 15;
                               tft.print(
                                   "Status: " + String(broadcastAttack.isActive() ? "ACTIVE" : "INACTIVE")
                               );
-                              tft.setCursor(BORDER_PAD_X, tftHeight - BORDER_PAD_X - LH * FP);
+                              tft.setCursor(10, tftHeight - 20);
                               tft.print("Sel: Back");
                               while (!check(SelPress) && !check(EscPress)) {
                                   if (check(PrevPress)) break;
@@ -4114,9 +4109,9 @@ void karma_setup() {
                  }},
                 {"Show Stats", [&]() {
                      drawMainBorderWithTitle("KARMA STATS");
-                     int y = BORDER_PAD_Y;
-                     tft.setTextSize(FP);
-                     tft.setCursor(BORDER_PAD_X, y);
+                     int y = 45;
+                     tft.setTextSize(1);
+                     tft.setCursor(10, y);
                      padprint("Probes: " + String(totalProbes));
                      padprintln("Uniq Clients: " + String(uniqueClients), 11);
                      padprint("Responses: " + String(karmaResponsesSent));

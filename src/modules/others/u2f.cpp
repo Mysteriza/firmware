@@ -1667,35 +1667,28 @@ U2fHidDevice &u2fDevice() {
     return *g_u2f;
 }
 
-namespace {
-const int u2fTitleY = BORDER_PAD_X;
-const int u2fBodyStartY = u2fTitleY + LH * FM + 12;
-const int u2fLineStep = LH * FP + 6;
-const int u2fRuntimeY = u2fBodyStartY + 3 * u2fLineStep + 6;
-} // namespace
-
 void drawU2fStatusScreen() {
     tft.fillScreen(bruceConfig.bgColor);
-    tft.setTextSize(FM);
+    tft.setTextSize(2);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.setCursor(BORDER_OFFSET_FROM_SCREEN_EDGE + 1, u2fTitleY);
+    tft.setCursor(6, 8);
     tft.print("USB U2F");
 
-    tft.setTextSize(FP);
-    tft.setCursor(BORDER_OFFSET_FROM_SCREEN_EDGE + 1, u2fBodyStartY);
+    tft.setTextSize(1);
+    tft.setCursor(6, 36);
     tft.print("Ready for registration/login");
-    tft.setCursor(BORDER_OFFSET_FROM_SCREEN_EDGE + 1, u2fBodyStartY + u2fLineStep);
+    tft.setCursor(6, 50);
     tft.print("Press center when prompted");
-    tft.setCursor(BORDER_OFFSET_FROM_SCREEN_EDGE + 1, u2fBodyStartY + 2 * u2fLineStep);
+    tft.setCursor(6, 64);
     tft.print("ESC: Back");
 }
 
 void updateU2fRuntimeInfo(const U2fHidDevice &device) {
-    tft.fillRect(0, u2fRuntimeY, tftWidth, tftHeight - u2fRuntimeY, bruceConfig.bgColor);
-    tft.setTextSize(FM);
-    tft.setCursor(BORDER_OFFSET_FROM_SCREEN_EDGE + 1, u2fRuntimeY + BORDER_PAD_X);
+    tft.fillRect(0, 84, tftWidth, tftHeight - 84, bruceConfig.bgColor);
+    tft.setTextSize(2);
+    tft.setCursor(6, 94);
     tft.print(device.waitingForPresence() ? "Confirm now" : "Waiting...");
-    tft.setTextSize(FP);
+    tft.setTextSize(1);
 }
 
 } // namespace

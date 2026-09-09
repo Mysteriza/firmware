@@ -1125,7 +1125,7 @@ static void sendDeauthNow() {
         }
     }
     if (deauth_sent) {
-        tft.setTextSize(FP);
+        tft.setTextSize(1);
         tft.setTextDatum(0);
         tft.drawString("Deauth sent.", DEAUTH_MSG_X, DEAUTH_MSG_Y);
         deauth_displayed = true;
