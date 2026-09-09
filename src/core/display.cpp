@@ -11,7 +11,6 @@
 #define MAX_MENU_SIZE (int)(tftHeight / 25)
 
 uint8_t mainMenuGridColumns = 0;
-bool (*gridPageTapHandler)(int x, int y, int currentIndex, int &newIndex) = nullptr;
 
 #if defined(HAS_TOUCH)
 static bool s_pageUpVisible = false, s_pageDownVisible = false;
@@ -552,10 +551,6 @@ int loopOptions(
 
     bool useTapToSelect = menuType == MENU_TYPE_REGULAR ||
                           (bruceConfig.mainMenuStyle == MAIN_MENU_GRID && menuType == MENU_TYPE_MAIN);
-    if (menuType == MENU_TYPE_SUBMENU) {
-        useTapToSelect = false;
-        touchZoneOutsideFooterEnabled = true;
-    }
 
     bool prevTouchZoneOutsideFooterEnabled = touchZoneOutsideFooterEnabled;
     if (useTapToSelect) touchZoneOutsideFooterEnabled = false;
@@ -673,48 +668,6 @@ int loopOptions(
         if (showEscButton && touchPoint.pressed && touchPoint.x >= escX && touchPoint.x < escX + escW &&
             touchPoint.y >= escY && touchPoint.y < escY + escH) {
             EscPress = true;
-            touchPoint.pressed = false;
-        }
-        // Grid page-up/page-down tap zone (right edge strip) — needed because tap-to-select can
-        // only ever reach cells that are actually on screen, unlike Prev/Next which auto-scroll.
-        if (useTapToSelect && touchPoint.pressed && menuType == MENU_TYPE_MAIN && mainMenuGridColumns > 1 &&
-            gridPageTapHandler) {
-            int newIndex;
-            if (gridPageTapHandler(touchPoint.x, touchPoint.y, index, newIndex)) {
-                index = newIndex;
-                redraw = true;
-                touchPoint.pressed = false;
-            }
-        }
-        if (touchPoint.pressed) {
-            if (s_pageUpVisible && touchPoint.x >= s_pageUpX && touchPoint.x < s_pageUpX + s_pageUpW &&
-                touchPoint.y >= s_pageUpY && touchPoint.y < s_pageUpY + s_pageUpH) {
-                index = s_pageUpTargetIndex;
-                redraw = true;
-                touchPoint.pressed = false;
-            } else if (
-                s_pageDownVisible && touchPoint.x >= s_pageDownX &&
-                touchPoint.x < s_pageDownX + s_pageDownW && touchPoint.y >= s_pageDownY &&
-                touchPoint.y < s_pageDownY + s_pageDownH
-            ) {
-                index = s_pageDownTargetIndex;
-                redraw = true;
-                touchPoint.pressed = false;
-            }
-        }
-        // Tap-to-select: a tap on a different item just selects it (redraw); a second tap on the
-        // item that's already selected fires SelPress to execute it, same as the physical button.
-        if (useTapToSelect && touchPoint.pressed) {
-            for (size_t i = 0; i < options.size(); i++) {
-                if (options[i].enabled && options[i].contain(touchPoint.x, touchPoint.y)) {
-                    if (static_cast<int>(i) == index) SelPress = true;
-                    else {
-                        index = static_cast<int>(i);
-                        redraw = true;
-                    }
-                    break;
-                }
-            }
             touchPoint.pressed = false;
         }
 #endif
