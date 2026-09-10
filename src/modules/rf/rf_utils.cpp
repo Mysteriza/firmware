@@ -433,6 +433,13 @@ void setMHZ(float frequency) {
     }
 }
 
+void rf_cc1101_hop(float frequency) {
+    if (bruceConfigPins.rfModule != CC1101_SPI_MODULE) return;
+    ELECHOUSE_cc1101.setSidle();
+    setMHZ(frequency);
+    ELECHOUSE_cc1101.SetRx();
+}
+
 int find_pulse_index(const std::vector<int> &indexed_durations, int duration) {
     int abs_duration = abs(duration);
     int closest_index = -1;

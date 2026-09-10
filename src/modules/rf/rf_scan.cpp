@@ -204,11 +204,50 @@ bool RFScan::fast_scan() {
         idx = range_limits[bruceConfigPins.rfScanRange][0];
     }
     float checkFrequency = subghz_frequency_list[idx];
-    setMHZ(checkFrequency);
+    rf_cc1101_hop(checkFrequency);
     tft.drawPixel(0, 0, 0); // To make sure CC1101 shared with TFT works properly
     vTaskDelay(5 / portTICK_PERIOD_MS);
     rssi = ELECHOUSE_cc1101.getRssi();
     if (rssi > rssiThreshold) {
+        RF_DBG("scan hit: freq=%.2f rssi=%d", checkFrequency, (int)rssi);
+        // Strong carrier here: dwell briefly while draining the RMT receiver
+        // so the *same* transmission that triggered detection can be captured.
+        // A single valid frame locks the frequency immediately (no 2nd press).
+        // Attribute captures to this frequency before decoding, flush any stale
+        // capture completed before the hop (wrong frequency), and only accept
+        // frames that decode or RAW frames with a CRC so noise is never stored.
+        frequency = checkFrequency;
+        {
+            std::vector<int> stale;
+            _rx.poll(stale);
+        }
+        unsigned long dwellUntil = millis() + 30;
+        bool captured = false;
+        while (millis() < dwellUntil) {
+            std::vector<int> durations;
+            if (_rx.poll(durations)) {
+                RF_DBG("dwell poll: %u durations", (unsigned)durations.size());
+                if (!ReadRAW) {
+                    captured = decode_signal(durations);
+                } else {
+                    captured = read_raw(durations);
+                    if (captured && received.key == 0) captured = false; // RAW w/o CRC = noise
+                }
+                if (captured) break;
+            }
+            vTaskDelay(2 / portTICK_PERIOD_MS);
+        }
+        if (captured) {
+            bruceConfigPins.setRfFreq(checkFrequency, 1); // lock as fixed frequency
+            frequency = checkFrequency;                   // decode_signal() reset it to 0
+            RF_DBG("scan lock: freq=%.2f", checkFrequency);
+            Serial.println("Frequency Found: " + String(frequency));
+            // Radio is already in RX on this frequency and RMT is armed:
+            // no deinitRfModule() needed. loop() restarts via setup() as usual.
+            return true;
+        }
+        frequency = 0; // back to scan state; fall through to hit accumulation
+
         _freqs[_try].freq = checkFrequency;
         _freqs[_try].rssi = rssi;
         _try++;
