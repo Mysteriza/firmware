@@ -137,11 +137,8 @@ static void rf_raw_record_accept_capture(
     status.lastSignalTime = receivedTime;
 }
 
-static void rf_raw_record_update_status(
-    RawRecordingStatus &status, bool &fakeRssiPresent, bool rssiFeature
-) {
-    if (status.recordingStarted &&
-        (status.lastRssiUpdate == 0 || millis() - status.lastRssiUpdate >= 100)) {
+static void rf_raw_record_update_status(RawRecordingStatus &status, bool &fakeRssiPresent, bool rssiFeature) {
+    if (status.recordingStarted && (status.lastRssiUpdate == 0 || millis() - status.lastRssiUpdate >= 100)) {
         if (fakeRssiPresent) status.latestRssi = -45;
         else status.latestRssi = -90;
         fakeRssiPresent = false;
@@ -176,7 +173,7 @@ float rf_freq_scan() {
                 idx = range_limits[bruceConfigPins.rfScanRange][0];
             }
             float checkFrequency = subghz_frequency_list[idx];
-            setMHZ(checkFrequency);
+            rf_cc1101_hop(checkFrequency);
             tft.drawPixel(0, 0, 0); // To make sure CC1101 shared with TFT works properly
             vTaskDelay(5 / portTICK_PERIOD_MS);
             rssi = ELECHOUSE_cc1101.getRssi();
@@ -328,7 +325,7 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
         if (rx_size != 0) {
             bool valid_signal = false;
             if (rx_size >= 5) valid_signal = true;
-            if (valid_signal) {         // ignore codes shorter than 5 items
+            if (valid_signal) { // ignore codes shorter than 5 items
                 rmt_symbol_word_t *code = (rmt_symbol_word_t *)malloc(rx_size * sizeof(rmt_symbol_word_t));
 
                 // Gap calculation
@@ -337,7 +334,9 @@ void rf_raw_record_create(RawRecording &recorded, bool &returnToMenu) {
                     code[i] = rx_items[i];
                     signalDuration += rx_items[i].duration0 + rx_items[i].duration1;
                 }
-                rf_raw_record_accept_capture(recorded, status, fakeRssiPresent, code, rx_size, signalDuration);
+                rf_raw_record_accept_capture(
+                    recorded, status, fakeRssiPresent, code, rx_size, signalDuration
+                );
             }
             ESP_ERROR_CHECK(rmt_receive(rx_ch, item, sizeof(item), &receive_config));
             rx_size = 0;

@@ -24,6 +24,11 @@ void deinitRfModule();
 void initCC1101once(SPIClass *SSPI);
 
 void setMHZ(float frequency);
+// Hop to a frequency for scanning: SIDLE -> setMHZ -> RX, per the CC1101
+// datasheet rule that frequency registers must only be updated in IDLE.
+// Unlike setMHZ() in scan mode (which leaves MARCSTATE untouched), this
+// guarantees the receiver is actually listening on the new frequency.
+void rf_cc1101_hop(float frequency);
 int find_pulse_index(const std::vector<int> &indexed_durations, int duration);
 uint64_t crc64_ecma(const std::vector<int> &data);
 
