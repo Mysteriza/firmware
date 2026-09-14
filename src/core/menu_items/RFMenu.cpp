@@ -3,18 +3,20 @@
 #include "core/settings.h"
 #include "core/utils.h"
 #include "modules/rf/record.h"
+#include "modules/rf/rf_analyzer.h"
 #include "modules/rf/rf_bruteforce.h"
 #include "modules/rf/rf_jammer.h"
 #include "modules/rf/rf_listen.h"
 #include "modules/rf/rf_scan.h"
 #include "modules/rf/rf_send.h"
-#include "modules/rf/rf_utils.h"
 #include "modules/rf/rf_spectrum.h"
+#include "modules/rf/rf_utils.h"
 #include "modules/rf/rf_waterfall.h"
 
 void RFMenu::optionsMenu() {
     options = {
         {"Scan/copy",       [=]() { RFScan(); }       },
+        {"Freq Analyzer",   rf_analyzer               },
 #if !defined(LITE_VERSION)
         {"Record RAW",      rf_raw_record             }, // Pablo-Ortiz-Lopez
         {"Custom SubGhz",   sendCustomRF              },
