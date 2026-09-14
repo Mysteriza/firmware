@@ -44,24 +44,25 @@ void rf_analyzer() {
         return;
     }
 
-    // Large number: "XXX.XX" (~6 chars) comfortably fills the width.
+    // Huge number: "XXX.XX" (~6 chars) fills the width.
     // Classic font is 6px wide per char at size 1.
-    int freqSize = tftWidth / (6 * 7);
+    int freqSize = tftWidth / (6 * 6);
     if (freqSize < 2) freqSize = 2;
-    if (freqSize > 6) freqSize = 6;
+    if (freqSize > 7) freqSize = 7;
 
     float frozenFreq = 0.f;
     int frozenRssi = -100;
     bool exitRequested = false;
 
-    // Static frame, painted once. Number + bar areas repaint only.
-    // Adaptive layout: shrink the big digits until number + dBm + bar +
-    // bottom hint all fit without overlapping on any panel height. (On
-    // short landscape screens the bar used to cover the "[ESC] Back" hint.)
+    // Static frame, painted once. Number + dBm + bar areas repaint only.
+    // No bottom hint: ESC still leaves (handled in the loop), so the freed
+    // space goes to the frequency digits. Adaptive layout shrinks the
+    // digits only until number + dBm + bar fit the panel height.
     drawMainBorderWithTitle("Freq Analyzer");
     const int yTitle = BORDER_PAD_Y + FM * LH + 2;
-    const int escY = tftHeight - BORDER_PAD_X - FP * LH;
-    const int dbmH = 2 * FP * LH + 2;
+    const int bottomY = tftHeight - BORDER_PAD_X - 2;
+    const int dbmSize = FP + 1;
+    const int dbmH = dbmSize * LH + 2;
     const int barH = 14;
     const int barW = tftWidth - 2 * BORDER_PAD_X;
     int yFreq = yTitle;
@@ -70,10 +71,10 @@ void rf_analyzer() {
     int barY = yTitle;
     while (1) {
         freqH = freqSize * 8 + 6;
-        yFreq = yTitle + FP * LH + 12;
-        ySub = yFreq + freqH + 8;
+        yFreq = yTitle + FP * LH + 10;
+        ySub = yFreq + freqH + 6;
         barY = ySub + dbmH + 8;
-        if (barY + barH <= escY - 2 || freqSize <= 2) break;
+        if (barY + barH <= bottomY || freqSize <= 2) break;
         freqSize--;
     }
     tft.setTextSize(FP);
@@ -81,9 +82,6 @@ void rf_analyzer() {
     tft.drawCentreString("ALL RANGES", tftWidth / 2, yTitle, SMOOTH_FONT);
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.drawCentreString("---.--", tftWidth / 2, yFreq, SMOOTH_FONT);
-    tft.setTextColor(getColorVariation(bruceConfig.priColor), bruceConfig.bgColor);
-    tft.drawCentreString("[ESC] Back", tftWidth / 2, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT);
-    tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
 
     // Peak-hold bar with slow decay (VU-meter style): jumps instantly to a
     // stronger sample so each remote press visibly kicks the meter, then
@@ -172,13 +170,12 @@ void rf_analyzer() {
         // --- dBm: always live, follows this pass' peak (no hysteresis) ---
         // Same remote at a different distance reads a different strength,
         // so this number moves even while the frozen frequency stays put.
-        // Rendered 2x with the bar color so strength reads at a glance.
+        // Slightly enlarged with the bar color so strength reads at a glance.
         if (!exitRequested && peakFreq > 0) {
-            const int dbmH = 2 * FP * LH + 2;
             tft.fillRect(BORDER_PAD_X, ySub - 1, barW, dbmH, bruceConfig.bgColor);
             char sub[32];
             snprintf(sub, sizeof(sub), "%d dBm", peakRssi);
-            tft.setTextSize(FP * 2);
+            tft.setTextSize(dbmSize);
             tft.setTextColor(barColor(peakRssi), bruceConfig.bgColor);
             tft.drawCentreString(sub, tftWidth / 2, ySub, SMOOTH_FONT);
             tft.setTextSize(FP);
