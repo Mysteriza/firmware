@@ -239,7 +239,7 @@ bool RFScan::fast_scan() {
         }
         if (captured) {
             bruceConfigPins.setRfFreq(checkFrequency, 1); // lock as fixed frequency
-            frequency = checkFrequency; // decode_signal() reset it to 0
+            frequency = checkFrequency;                   // decode_signal() reset it to 0
             RF_DBG("scan lock: freq=%.2f", checkFrequency);
             Serial.println("Frequency Found: " + String(frequency));
             // Radio is already in RX on this frequency and RMT is armed:
@@ -406,8 +406,7 @@ bool RFScan::read_raw(const std::vector<int> &durations) {
     }
     // no decode, but a repeated pattern gave us a CRC
     else if (hasCrc) {
-        if (bruceConfigPins.rfModule == M5_RF_MODULE &&
-            !rf_m5_raw_is_plausible(hasCrc, rawBits, rawTe)) {
+        if (bruceConfigPins.rfModule == M5_RF_MODULE && !rf_m5_raw_is_plausible(hasCrc, rawBits, rawTe)) {
             RF_DBG(
                 "m5 raw discard: crc=%d bits=%d te=%d minBits=%d minTe=%d",
                 (int)hasCrc,
@@ -669,30 +668,33 @@ void RFScan::open_scan_options() {
         if (bruceConfigPins.rfModule == CC1101_SPI_MODULE && !bruceConfigPins.rfFxdFreq)
             options.emplace_back("Threshold", [&]() { action = THRESHOLD; });
 
-        if (ReadRAW) options.emplace_back("Mode = RAW", [&]() {
-            ReadRAW = false;
-            reopen = true;
-        });
+        if (ReadRAW)
+            options.emplace_back("Mode = RAW", [&]() {
+                ReadRAW = false;
+                reopen = true;
+            });
         else
             options.emplace_back("Mode = Decode", [&]() {
                 ReadRAW = true;
                 reopen = true;
             });
 
-        if (ReadRAW && codesOnly) options.emplace_back("Filter = Code", [&]() {
-            codesOnly = false;
-            reopen = true;
-        });
+        if (ReadRAW && codesOnly)
+            options.emplace_back("Filter = Code", [&]() {
+                codesOnly = false;
+                reopen = true;
+            });
         else if (ReadRAW)
             options.emplace_back("Filter = All", [&]() {
                 codesOnly = true;
                 reopen = true;
             });
 
-        if (autoSave) options.emplace_back("Save = Auto", [&]() {
-            autoSave = false;
-            reopen = true;
-        });
+        if (autoSave)
+            options.emplace_back("Save = Auto", [&]() {
+                autoSave = false;
+                reopen = true;
+            });
         else
             options.emplace_back("Save = Manual", [&]() {
                 autoSave = true;
@@ -766,9 +768,7 @@ void RFScan::show_signal_info(int index) {
     padprintln(captures[index].saved ? "Saved: yes" : "Saved: no");
 
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
-    tft.drawCentreString(
-        "Press any key", tftWidth / 2, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT
-    );
+    tft.drawCentreString("Press any key", tftWidth / 2, tftHeight - BORDER_PAD_X - FP * LH, SMOOTH_FONT);
 
     rf_wait_any_key();
     rf_clear_nav_state();
@@ -1190,9 +1190,10 @@ String rfReceiveSignal(float frequency, int max_loops, bool raw, bool headless) 
             String subfile_out = rf_subghz_header(frequency);
             if (!outRaw) {
                 subfile_out += "Preset: " + String(received.preset) + "\n";
-                subfile_out +=
-                    "Protocol: " +
-                    (received.protocol == "" ? String("RcSwitch") : rf_flipper_protocol_name(received.protocol)) + "\n";
+                subfile_out += "Protocol: " +
+                               (received.protocol == "" ? String("RcSwitch")
+                                                        : rf_flipper_protocol_name(received.protocol)) +
+                               "\n";
                 subfile_out += "Bit: " + String(received.Bit) + "\n";
                 subfile_out += "Key: " + String(hexString) + "\n";
                 if (received.hop != 0 || received.serial != 0 || received.cnt != 0) {
