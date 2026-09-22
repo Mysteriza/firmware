@@ -141,12 +141,13 @@ void InputHandler(void) {
     if (!_l) { PrevPress = true; }
     if (!_r) { NextPress = true; }
     if (!_u) {
+        // Single-step only: do NOT set PrevPagePress here. loopOptions() auto-turns
+        // pages at boundaries; coupling page-jump to U/D made one press skip content.
         UpPress = true;
-        PrevPagePress = true;
     }
     if (!_d) {
+        // Single-step only: do NOT set NextPagePress here (same reason as above).
         DownPress = true;
-        NextPagePress = true;
     }
     if (!_s) { SelPress = true; }
 

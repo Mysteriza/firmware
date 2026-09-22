@@ -229,7 +229,9 @@ void QuickAccessMenu::addFilesMenu() {
     }
 
     options.push_back({"Back", []() { returnToMenu = true; }});
-    loopOptions(options, MENU_TYPE_SUBMENU, "Select Source");
+    // REGULAR (not SUBMENU) so this renders as the same centered popup box
+    // used by the other file-source pickers (e.g. IR Custom: Recent/LittleFS/Menu).
+    loopOptions(options);
 }
 
 // ── Draw star icon ───────────────────────────────────────────────────────
