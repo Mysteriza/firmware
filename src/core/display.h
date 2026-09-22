@@ -7,10 +7,10 @@
 #include <LittleFS.h>
 #include <SD.h>
 #include <globals.h>
-#define STATUS_BAR_HEIGHT 30
 #define BORDER_OFFSET_FROM_SCREEN_EDGE 5
-#define BORDER_PAD_X 10
-#define BORDER_PAD_Y 28
+#define BORDER_PAD_X (LW * FP + 4)
+#define STATUS_BAR_HEIGHT (LH * FM + 14)
+#define BORDER_PAD_Y (STATUS_BAR_HEIGHT - 2)
 #define MENU_TYPE_MAIN 0
 #define MENU_TYPE_SUBMENU 1
 #define MENU_TYPE_REGULAR 2
@@ -18,6 +18,11 @@
 // Columns of the main menu grid layout, set by MainMenu::begin().
 // 0 means the carousel layout is active and navigation stays linear.
 extern uint8_t mainMenuGridColumns;
+
+// Set once by MainMenu's constructor. Lets loopOptions() offer a page-up/page-down tap zone for
+// the grid without display.cpp depending on MainMenu's header. Returns true and writes newIndex
+// when (x, y) landed in the page zone (only meaningful when mainMenuGridColumns > 1).
+extern bool (*gridPageTapHandler)(int x, int y, int currentIndex, int &newIndex);
 
 void panelSleep(bool on);
 void turnOffDisplay();
@@ -30,7 +35,6 @@ struct Opt_Coord {
     uint16_t fgcolor = bruceConfig.priColor;
     uint16_t bgcolor = bruceConfig.bgColor;
 };
-Opt_Coord listFiles(int index, std::vector<FileList> fileList);
 void displayScrollingText(const String &text, Opt_Coord &coord, bool highlight = false);
 
 #if !defined(LITE_VERSION)
