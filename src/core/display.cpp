@@ -837,6 +837,11 @@ Opt_Coord drawOptions(
 ) {
     static int last_index = 0;
     static int last_init = -1;
+    if (firstRender) {
+        // Fresh menu invocation: drop stale highlight/page state from the previous menu.
+        last_index = index;
+        last_init = -1;
+    }
 
     Opt_Coord coord;
 
@@ -951,10 +956,14 @@ Opt_Coord drawOptions(
     for (i = 0; i < options.size(); i++) {
         if (i >= init) {
             int16_t cursorY = tft.getCursorY();
-
-            // Erase previously highlited element,
+            options[i].x = boxX;
+            options[i].y = cursorY;
+            options[i].w = boxW;
+            options[i].h = FM * LH + 4;
+            // Erase previously highlited element (row background, not the global
+            // screen background: callers may pass a custom bgcolor).
             if (i == last_index) {
-                tft.fillRoundRect(boxX + 2, cursorY + 2, boxW - 4, FM * LH + 2, 3, bruceConfig.bgColor);
+                tft.fillRoundRect(boxX + 2, cursorY + 2, boxW - 4, FM * LH + 2, 3, bgcolor);
             }
             if (i == index) {
                 uint16_t highlightColor = options[i].hasColor ? options[i].color : bruceConfig.priColor;
@@ -1025,6 +1034,9 @@ Opt_Coord drawOptions(
         s_pageDownY = cursorY;
         s_pageDownW = boxW;
         s_pageDownH = FM * LH + 4;
+        // Advance past this row (mirrors Page Up): the trailing cleanup loop
+        // below starts from getCursorY() and would otherwise blank this row.
+        tft.setCursor(boxX + BORDER_OFFSET_FROM_SCREEN_EDGE, cursorY + FM * LH + 4);
         tft.setTextColor(fgcolor, bgcolor);
     }
 #endif
