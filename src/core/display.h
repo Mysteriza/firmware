@@ -197,6 +197,19 @@ inline int loopOptions(std::vector<Option> &options) {
     return loopOptions(options, MENU_TYPE_REGULAR, "", 0, false);
 }
 
+// ── Named menu-style helpers (UI consistency rule) ─────────────────────
+// Small choice lists (file-source pickers, confirmations, option pickers)
+// MUST use popupPicker(): centered popup box, Back exits via returnToMenu.
+// Named category/config screens MUST use categoryMenu(title): full-screen
+// list with title bar. Do NOT call loopOptions() with a raw menuType for
+// these two cases; the style must be readable from the call site.
+inline int popupPicker(std::vector<Option> &options, int _index = 0) {
+    return loopOptions(options, MENU_TYPE_REGULAR, "", _index, false);
+}
+inline int categoryMenu(std::vector<Option> &options, const char *title, int _index = 0) {
+    return loopOptions(options, MENU_TYPE_SUBMENU, title, _index, false);
+}
+
 Opt_Coord drawOptions(
     int index, std::vector<Option> &options, uint16_t fgcolor, uint16_t selcolor, uint16_t bgcolor,
     bool firstRender = true, bool border = true
@@ -215,6 +228,12 @@ void printCenterFootnote(const String &text);
 void drawWireguardStatus(int x, int y);
 
 void progressHandler(int progress, size_t total, const String &message = "Running, Wait");
+
+// ── Shared bar primitive (UI consistency rule) ─────────────────────────
+// All progress/slider bars (progressHandler, audio player, spectra) MUST be
+// drawn through drawBar() so fill math, clamping and colors stay identical.
+// Chrome around the bar (borders, knobs, labels) stays with the caller.
+void drawBar(int x, int y, int w, int h, float frac, uint16_t fg, uint16_t bg);
 
 bool __attribute__((weak)) isCharging();
 

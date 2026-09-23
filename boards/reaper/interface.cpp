@@ -138,15 +138,23 @@ void InputHandler(void) {
         if (!wakeUpScreen()) AnyKeyPress = true;
         else return;
     }
-    if (!_l) { PrevPress = true; }
-    if (!_r) { NextPress = true; }
+    if (!_l) {
+        // LEFT = page-left in paged lists (PrevPagePress), single-step elsewhere
+        // (PrevPress). loopOptions() consumes the paired step on jump.
+        PrevPress = true;
+        PrevPagePress = true;
+    }
+    if (!_r) {
+        // RIGHT = page-right in paged lists (NextPagePress), single-step elsewhere.
+        NextPress = true;
+        NextPagePress = true;
+    }
     if (!_u) {
-        // Single-step only: do NOT set PrevPagePress here. loopOptions() auto-turns
-        // pages at boundaries; coupling page-jump to U/D made one press skip content.
+        // UP = single step only (never pages).
         UpPress = true;
     }
     if (!_d) {
-        // Single-step only: do NOT set NextPagePress here (same reason as above).
+        // DOWN = single step only (never pages).
         DownPress = true;
     }
     if (!_s) { SelPress = true; }

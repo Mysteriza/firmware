@@ -229,9 +229,8 @@ void QuickAccessMenu::addFilesMenu() {
     }
 
     options.push_back({"Back", []() { returnToMenu = true; }});
-    // REGULAR (not SUBMENU) so this renders as the same centered popup box
-    // used by the other file-source pickers (e.g. IR Custom: Recent/LittleFS/Menu).
-    loopOptions(options);
+    // Popup-box picker like the other file-source pickers (e.g. IR Custom).
+    popupPicker(options);
 }
 
 // ── Draw star icon ───────────────────────────────────────────────────────

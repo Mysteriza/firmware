@@ -166,7 +166,7 @@ void drawButton(int x, int y, int size, IconType icon, bool selected, bool activ
     drawVectorIcon(x + iconPadding, y + iconPadding, size - 2 * iconPadding, icon, iconColor);
 }
 
-// Draw Styled Progress Bar
+// Draw Styled Progress Bar (fill math via core drawBar(); knob stays local chrome)
 void drawProgressBar(int x, int y, int width, int height, unsigned long position, unsigned long duration) {
     uint16_t barBg = TFT_DARKGREY;
     uint16_t barFill = bruceConfig.priColor;
@@ -174,14 +174,12 @@ void drawProgressBar(int x, int y, int width, int height, unsigned long position
     // Background bar
     int barY = y + (height / 2) - 2;
     int barH = 4;
-    tft.fillRect(x, barY, width, barH, barBg);
+    float frac = (duration > 0) ? (float)position / (float)duration : 0;
+    drawBar(x, barY, width, barH, frac, barFill, barBg);
 
     if (duration > 0) {
         int fillWidth = (position * width) / duration;
         if (fillWidth > width) fillWidth = width;
-
-        // Fill bar
-        tft.fillRect(x, barY, fillWidth, barH, barFill);
 
         // Knob at the end
         if (fillWidth > 2) { tft.fillCircle(x + fillWidth, y + (height / 2), 4, TFT_WHITE); }

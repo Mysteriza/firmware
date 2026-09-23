@@ -544,6 +544,59 @@ void padprintln(double n, int digits, int16_t padx) {
 **  Function: loopOptions
 **  Where you choose among the options in menu
 **********************************************************************/
+/*********************************************************************
+ **  Shared option-list paging (single source of truth for drawOptions
+ **  and loopOptions page jumps). Page boundaries here MUST match what is
+ **  drawn, otherwise page jumps land mid-page and text appears to overlap.
+ *********************************************************************/
+struct OptionsPage {
+    int start;
+    int count;
+    bool pageUp;
+    bool pageDown;
+};
+
+static std::vector<OptionsPage> buildOptionPages(int arraySize) {
+    int rowHeightPx = FM * LH + 4;
+    int32_t margin = 10; // matches Launcher's tftHeight-20 (10px top+bottom)
+    int fitRows = (tftHeight - 2 * margin) / rowHeightPx;
+    if (fitRows < 1) fitRows = 1;
+
+    std::vector<OptionsPage> pages;
+    bool needsPaging = arraySize > fitRows;
+#if defined(HAS_TOUCH)
+    bool touchPaging = needsPaging;
+#else
+    bool touchPaging = false;
+#endif
+    if (!needsPaging) {
+        pages.push_back({0, arraySize, false, false});
+        return pages;
+    }
+    int remaining = arraySize;
+    int pageStart = 0;
+    while (remaining > 0) {
+        bool hasUp = touchPaging && !pages.empty();
+        int maxOptions = fitRows - (hasUp ? 1 : 0);
+        if (maxOptions < 1) maxOptions = 1;
+        int count = remaining < maxOptions ? remaining : maxOptions;
+        bool hasDown = false;
+        if (touchPaging) {
+            hasDown = remaining > count;
+            if (hasDown) {
+                int maxWithDown = fitRows - (hasUp ? 1 : 0) - 1;
+                if (maxWithDown < 1) maxWithDown = 1;
+                count = count < maxWithDown ? count : maxWithDown;
+                if (count >= remaining) hasDown = false;
+            }
+        }
+        pages.push_back({pageStart, count, hasUp, hasDown});
+        pageStart += count;
+        remaining -= count;
+    }
+    return pages;
+}
+
 int loopOptions(
     std::vector<Option> &options, uint8_t menuType, const char *subText, int index, bool interpreter,
     bool letterShortcuts, uint16_t pageJumpSize, bool border
@@ -742,15 +795,43 @@ int loopOptions(
         }
 #endif
 
+        // Page jumps land EXACTLY on page starts (same layout as drawOptions via
+        // buildOptionPages), never index+=N with overshoot. A jump also consumes
+        // the paired step flags so one physical press can never double-act
+        // (jump + step), which used to skip content and smear rows.
+        // NOTE: pageJumpSize only enables this block; the stride always comes
+        // from the page layout (one full screenful per press).
         if (pageJumpSize > 0) {
+            (void)pageJumpSize;
+            int optSize = static_cast<int>(options.size());
             if (check(NextPagePress)) {
-                index += pageJumpSize;
-                if (index >= static_cast<int>(options.size())) index = static_cast<int>(options.size()) - 1;
+                int target = optSize - 1; // last page: clamp to last item (legacy behavior)
+                std::vector<OptionsPage> pages = buildOptionPages(optSize);
+                for (size_t p = 0; p < pages.size(); ++p) {
+                    if (index >= pages[p].start && index < pages[p].start + pages[p].count) {
+                        if (p + 1 < pages.size()) target = pages[p + 1].start;
+                        break;
+                    }
+                }
+                while (target < optSize - 1 && !options[target].enabled) target++;
+                index = target;
+                check(NextPress); // consume: paired step must not fire this iteration
+                check(DownPress);
                 redraw = true;
             }
             if (check(PrevPagePress)) {
-                index -= pageJumpSize;
-                if (index < 0) index = 0;
+                int target = 0; // first page: clamp to first item (legacy behavior)
+                std::vector<OptionsPage> pages = buildOptionPages(optSize);
+                for (size_t p = 0; p < pages.size(); ++p) {
+                    if (index >= pages[p].start && index < pages[p].start + pages[p].count) {
+                        if (p > 0) target = pages[p - 1].start;
+                        break;
+                    }
+                }
+                while (target > 0 && !options[target].enabled) target--;
+                index = target;
+                check(PrevPress); // consume: paired step must not fire this iteration
+                check(UpPress);
                 redraw = true;
             }
         }
@@ -909,6 +990,15 @@ int loopOptions(
 ** Description:   Função para manipular o progresso da atualização
 ** Dependencia: prog_handler =>>    0 - Flash, 1 - LittleFS
 ***************************************************************************************/
+void drawBar(int x, int y, int w, int h, float frac, uint16_t fg, uint16_t bg) {
+    if (w < 1 || h < 1) return;
+    if (frac < 0) frac = 0;
+    if (frac > 1) frac = 1;
+    tft.fillRect(x, y, w, h, bg);
+    int fw = (int)(w * frac);
+    if (fw > 0) tft.fillRect(x, y, fw, h, fg);
+}
+
 void progressHandler(int progress, size_t total, const String &message) {
     int barHeight = LH * FP + 5;
     int barY = tftHeight - barHeight - BORDER_PAD_Y;
@@ -926,7 +1016,9 @@ void progressHandler(int progress, size_t total, const String &message) {
         );
         displayRedStripe(message, TFT_WHITE, bruceConfig.priColor);
     }
-    tft.fillRect(2 * BORDER_PAD_X, barY, barWidth, barHeight, bruceConfig.priColor);
+    float frac = (total > 0) ? (float)progress / (float)total : 0;
+    drawBar(2 * BORDER_PAD_X, barY, tftWidth - 4 * BORDER_PAD_X, barHeight, frac, bruceConfig.priColor,
+            bruceConfig.bgColor);
 }
 
 /***************************************************************************************
@@ -949,51 +1041,18 @@ Opt_Coord drawOptions(
 
     int rowHeightPx = FM * LH + 4;
     int32_t margin = 10; // matches Launcher's tftHeight-20 (10px top+bottom) for both border states
-    int fitRows = (tftHeight - 2 * margin) / rowHeightPx;
-    if (fitRows < 1) fitRows = 1;
+    // NOTE: visible-row capacity (fitRows) lives in buildOptionPages() now.
 
     int arraySize = static_cast<int>(options.size());
-    bool needsPaging = arraySize > fitRows;
-#if defined(HAS_TOUCH)
-    bool touchPaging = needsPaging;
-#else
-    bool touchPaging = false;
-#endif
 
-    struct SubmenuPage {
-        int start;
-        int count;
-        bool pageUp;
-        bool pageDown;
-    };
-    std::vector<SubmenuPage> pages;
+    // Page layout shared with loopOptions() page jumps (see buildOptionPages).
+    std::vector<OptionsPage> pages = buildOptionPages(arraySize);
+    bool needsPaging = pages.size() > 1;
     int maxRowsAcrossPages = 0;
-    if (needsPaging) {
-        int remaining = arraySize;
-        int pageStart = 0;
-        while (remaining > 0) {
-            bool hasUp = touchPaging && !pages.empty();
-            int maxOptions = fitRows - (hasUp ? 1 : 0);
-            if (maxOptions < 1) maxOptions = 1;
-            int count = remaining < maxOptions ? remaining : maxOptions;
-            bool hasDown = false;
-            if (touchPaging) {
-                hasDown = remaining > count;
-                if (hasDown) {
-                    int maxWithDown = fitRows - (hasUp ? 1 : 0) - 1;
-                    if (maxWithDown < 1) maxWithDown = 1;
-                    count = count < maxWithDown ? count : maxWithDown;
-                    if (count >= remaining) hasDown = false;
-                }
-            }
-            pages.push_back({pageStart, count, hasUp, hasDown});
-            int rowsForThisPage = count + (hasUp ? 1 : 0) + (hasDown ? 1 : 0);
-            if (rowsForThisPage > maxRowsAcrossPages) maxRowsAcrossPages = rowsForThisPage;
-            pageStart += count;
-            remaining -= count;
-        }
+    for (const auto &pg : pages) {
+        int rowsForThisPage = pg.count + (pg.pageUp ? 1 : 0) + (pg.pageDown ? 1 : 0);
+        if (rowsForThisPage > maxRowsAcrossPages) maxRowsAcrossPages = rowsForThisPage;
     }
-    if (pages.empty()) pages.push_back({0, arraySize < fitRows ? arraySize : fitRows, false, false});
 
     int currentPage = 0;
     for (size_t p = 0; p < pages.size(); ++p) {
