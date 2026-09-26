@@ -769,195 +769,113 @@ String loopSD(FS &fs, bool filePicker, const String &allowed_ext, String rootPat
             if (&fs == &LittleFS && sdcardMounted)
                 options.push_back({"Copy->SD", [=]() { copyToFs(LittleFS, SD, filepath); }});
 
-                    // custom file formats commands added in front
-                    if (filepath.endsWith(".jpg") || filepath.endsWith(".gif") || filepath.endsWith(".bmp") ||
-                        filepath.endsWith(".png"))
-                        options.insert(options.begin(), {"View Image", [&]() {
-                                                             drawImg(fs, filepath, 0, 0, true, -1);
-                                                             delay(750);
-                                                             while (!check(AnyKeyPress))
-                                                                 vTaskDelay(10 / portTICK_PERIOD_MS);
-                                                         }});
-                    if (filepath.endsWith(".ir")) {
-                        options.insert(options.begin(), {"IR Choose cmd", [&]() {
-                                                             delay(200);
-                                                             chooseCmdIrFile(&fs, filepath);
-                                                         }});
-                        options.insert(options.begin(), {"IR Tx SpamAll", [&]() {
-                                                             delay(200);
-                                                             txIrFile(&fs, filepath);
-                                                         }});
-                        { // Pin / Unpin
-                            String label = getQuickAccessManager().isPinned(filepath)
-                                               ? "Unpin from Quick Access"
-                                               : "Pin to Quick Access";
-                            options.insert(
-                                options.begin() + 2,
-                                {label, [&]() { toggleQuickAccessPin(filepath, filename, "ir", fs); }}
-                            );
-                        }
-                    }
-                    if (filepath.endsWith(".sub")) {
-                        options.insert(options.begin(), {"Subghz Tx", [&]() {
-                                                             delay(200);
-                                                             RfCodes data{};
+            // custom file formats commands added in front
+            if (filepath.endsWith(".jpg") || filepath.endsWith(".gif") || filepath.endsWith(".bmp") ||
+                filepath.endsWith(".png"))
+                options.insert(options.begin(), {"View Image", [&]() {
+                                                     drawImg(fs, filepath, 0, 0, true, -1);
+                                                     delay(750);
+                                                     while (!check(AnyKeyPress))
+                                                         vTaskDelay(10 / portTICK_PERIOD_MS);
+                                                 }});
+            if (filepath.endsWith(".ir")) {
+                options.insert(options.begin(), {"IR Choose cmd", [&]() {
+                                                     delay(200);
+                                                     chooseCmdIrFile(&fs, filepath);
+                                                 }});
+                options.insert(options.begin(), {"IR Tx SpamAll", [&]() {
+                                                     delay(200);
+                                                     txIrFile(&fs, filepath);
+                                                 }});
+                { // Pin / Unpin (Quick Access)
+                    String label = getQuickAccessManager().isPinned(filepath)
+                                       ? "Unpin from Quick Access"
+                                       : "Pin to Quick Access";
+                    options.insert(
+                        options.begin() + 2,
+                        {label, [&]() { toggleQuickAccessPin(filepath, filename, "ir", fs); }}
+                    );
+                }
+            }
+            if (filepath.endsWith(".sub")) {
+                options.insert(options.begin(), {"Subghz Tx", [&]() {
+                                                     delay(200);
+                                                     RfCodes data{};
 
-                                                             if (readSubFile(&fs, filepath, data))
-                                                                 txSubFile(data);
-                                                         }});
-                        { // Pin / Unpin
-                            String label = getQuickAccessManager().isPinned(filepath)
-                                               ? "Unpin from Quick Access"
-                                               : "Pin to Quick Access";
-                            options.insert(
-                                options.begin() + 1,
-                                {label, [&]() { toggleQuickAccessPin(filepath, filename, "sub", fs); }}
-                            );
-                        }
-                    }
-                    if (filepath.endsWith(".csv")) {
-                        options.insert(options.begin(), {"Wigle Upload", [&]() {
-                                                             delay(200);
-                                                             Wigle wigle;
-                                                             wigle.upload(&fs, filepath);
-                                                         }});
-                        options.insert(options.begin(), {"Wigle Up All", [&]() {
-                                                             delay(200);
-                                                             Wigle wigle;
-                                                             wigle.upload_all(&fs, Folder);
-                                                         }});
-                        options.insert(options.begin(), {"WDG Upload", [&]() {
-                                                             delay(200);
-                                                             WDGoWars wdg;
-                                                             wdg.upload(&fs, filepath);
-                                                         }});
-                        options.insert(options.begin(), {"WDG Up All", [&]() {
-                                                             delay(200);
-                                                             WDGoWars wdg;
-                                                             wdg.upload_all(&fs, Folder);
-                                                         }});
-                    }
+                                                     if (readSubFile(&fs, filepath, data)) txSubFile(data);
+                                                 }});
+                { // Pin / Unpin (Quick Access)
+                    String label = getQuickAccessManager().isPinned(filepath)
+                                       ? "Unpin from Quick Access"
+                                       : "Pin to Quick Access";
+                    options.insert(
+                        options.begin() + 1,
+                        {label, [&]() { toggleQuickAccessPin(filepath, filename, "sub", fs); }}
+                    );
+                }
+            }
+            if (filepath.endsWith(".csv")) {
+                options.insert(options.begin(), {"Wigle Upload", [&]() {
+                                                     delay(200);
+                                                     Wigle wigle;
+                                                     wigle.upload(&fs, filepath);
+                                                 }});
+                options.insert(options.begin(), {"Wigle Up All", [&]() {
+                                                     delay(200);
+                                                     Wigle wigle;
+                                                     wigle.upload_all(&fs, Folder);
+                                                 }});
+                options.insert(options.begin(), {"WDG Upload", [&]() {
+                                                     delay(200);
+                                                     WDGoWars wdg;
+                                                     wdg.upload(&fs, filepath);
+                                                 }});
+                options.insert(options.begin(), {"WDG Up All", [&]() {
+                                                     delay(200);
+                                                     WDGoWars wdg;
+                                                     wdg.upload_all(&fs, Folder);
+                                                 }});
+            }
 #if !defined(LITE_VERSION) && !defined(DISABLE_INTERPRETER)
-                    if (filepath.endsWith(".bjs") || filepath.endsWith(".js")) {
-                        options.insert(options.begin(), {"JS Script Run", [&]() {
-                                                             delay(200);
-                                                             run_bjs_script_headless(fs, filepath);
-                                                             exit = true;
-                                                         }});
-                        { // Pin / Unpin
-                            String label = getQuickAccessManager().isPinned(filepath)
-                                               ? "Unpin from Quick Access"
-                                               : "Pin to Quick Access";
-                            options.insert(
-                                options.begin() + 1,
-                                {label, [&]() { toggleQuickAccessPin(filepath, filename, "js", fs); }}
-                            );
-                        }
-                    }
+            if (filepath.endsWith(".bjs") || filepath.endsWith(".js")) {
+                options.insert(options.begin(), {"JS Script Run", [&]() {
+                                                     delay(200);
+                                                     run_bjs_script_headless(fs, filepath);
+                                                     exit = true;
+                                                 }});
+                { // Pin / Unpin (Quick Access)
+                    String label = getQuickAccessManager().isPinned(filepath)
+                                       ? "Unpin from Quick Access"
+                                       : "Pin to Quick Access";
+                    options.insert(
+                        options.begin() + 1,
+                        {label, [&]() { toggleQuickAccessPin(filepath, filename, "js", fs); }}
+                    );
+                }
+            }
 #endif
 #if defined(USB_as_HID)
-                    if (filepath.endsWith(".txt")) {
-                        options.push_back({"BadUSB Run", [&]() {
-                                               ducky_startKb(hid_usb, false);
-                                               key_input(fs, filepath, hid_usb);
-                                               delete hid_usb;
-                                               hid_usb = nullptr;
-                                               // TODO: reinit serial port
-                                           }});
-                        options.push_back({"USB HID Type", [&]() {
-                                               String t = readSmallFile(fs, filepath);
-                                               displayRedStripe("Typing");
-                                               key_input_from_string(t);
-                                           }});
-                        { // Pin / Unpin
-                            String label = getQuickAccessManager().isPinned(filepath)
-                                               ? "Unpin from Quick Access"
-                                               : "Pin to Quick Access";
-                            options.push_back({label, [&]() {
-                                                   toggleQuickAccessPin(filepath, filename, "txt", fs);
-                                               }});
-                        }
-                    }
-                    if (filepath.endsWith(".enc")) { // encrypted files
-                        options.insert(
-                            options.begin(), {"Decrypt+Type", [&]() {
-                                                  String plaintext = readDecryptedFile(fs, filepath);
-                                                  if (plaintext.length() == 0)
-                                                      return displayError(
-                                                          "Decryption failed", true
-                                                      ); // file is too big or cannot read, or cancelled
-                                                  // else
-                                                  plaintext.trim(); // remove newlines
-                                                  key_input_from_string(plaintext);
-                                              }}
-                        );
-                    }
-#endif
-                    if (filepath.endsWith(".enc")) { // encrypted files
-                        options.insert(
-                            options.begin(), {"Decrypt+Show", [&]() {
-                                                  String plaintext = readDecryptedFile(fs, filepath);
-                                                  delay(200);
-                                                  if (plaintext.length() == 0)
-                                                      return displayError("Decryption failed", true);
-                                                  plaintext.trim(); // remove newlines
-                                                                    // if(plaintext.length()<..)
-                                                  displaySuccess(plaintext, true);
-                                                  // else
-                                                  // TODO: show in the text viewer
-                                              }}
-                        );
-                    }
-#if defined(HAS_NS4168_SPKR)
-                    if (isAudioFile(filepath))
-                        options.insert(options.begin(), {"Play Audio", [&]() {
-                                                             delay(200);
-                                                             check(AnyKeyPress);
-                                                             // playAudioFile(&fs, filepath);
-                                                             musicPlayerUI(&fs, filepath);
-                                                         }});
-#endif
-                    // generate qr codes from small files (<3K)
-                    size_t filesize = getFileSize(fs, filepath);
-                    // Serial.println(filesize);
-                    if (filesize < SAFE_STACK_BUFFER_SIZE && filesize > 0) {
-                        options.push_back({"QR code", [&]() {
-                                               delay(200);
-                                               qrcode_display(readSmallFile(fs, filepath));
-                                           }});
-                        options.push_back({"CRC32", [&]() {
-                                               delay(200);
-                                               displaySuccess(crc32File(fs, filepath), true);
-                                           }});
-                        options.push_back({"MD5", [&]() {
-                                               delay(200);
-                                               displaySuccess(md5File(fs, filepath), true);
-                                           }});
-                    }
-                    options.push_back({"Close Menu", [&]() { yield(); }});
-                    options.push_back({"Main Menu", [&]() { exit = true; }});
-                    if (!filePicker) {
-                        while (check(SelPress)) {
-                            vTaskDelay(pdMS_TO_TICKS(1));
-                        } // wait for SEL release to avoid repeated activations
-                        loopOptions(options);
-                    } else {
-                        result = filepath;
-                        break;
-                    }
-                    tft.drawRoundRect(5, 5, tftWidth - 10, tftHeight - 10, 5, bruceConfig.priColor);
-                    reload = true;
-                    redraw = true;
-                } else {
-                BACK_FOLDER:
-                    if (Folder == "/") break;
-                    Folder = Folder.substring(0, Folder.lastIndexOf('/'));
-                    if (Folder == "") Folder = "/";
-                    Serial.println("Going to folder: " + Folder);
-                    index = 0;
-                    redraw = true;
+            if (filepath.endsWith(".txt")) {
+                options.push_back({"BadUSB Run", [&]() {
+                                       ducky_startKb(hid_usb, false);
+                                       key_input(fs, filepath, hid_usb);
+                                       delete hid_usb;
+                                       hid_usb = nullptr;
+                                       // TODO: reinit serial port
+                                   }});
+                options.push_back({"USB HID Type", [&]() {
+                                       String t = readSmallFile(fs, filepath);
+                                       displayRedStripe("Typing");
+                                       key_input_from_string(t);
+                                   }});
+                { // Pin / Unpin (Quick Access)
+                    String label = getQuickAccessManager().isPinned(filepath)
+                                       ? "Unpin from Quick Access"
+                                       : "Pin to Quick Access";
+                    options.push_back({label, [&]() {
+                                           toggleQuickAccessPin(filepath, filename, "txt", fs);
+                                       }});
                 }
-                redraw = true;
             }
             if (filepath.endsWith(".enc")) { // encrypted files
                 options.insert(options.begin(), {"Decrypt+Type", [&]() {
