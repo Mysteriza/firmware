@@ -748,8 +748,13 @@ void configureWebServer() {
 void startWebUi(bool mode_ap) {
     bool keepWifiConnected = false;
     if (!WiFi.isConnected()) {
-        if (mode_ap) wifiConnectMenu(WIFI_AP);
-        else wifiConnectMenu(WIFI_STA);
+        bool ok;
+        if (mode_ap) ok = wifiConnectMenu(WIFI_AP);
+        else ok = wifiConnectMenu(WIFI_STA);
+        // User cancelled (Back) or the connection failed: never start a broken
+        // server showing 0.0.0.0. Return straight to the caller (Files menu).
+        if (!ok) return;
+        if (!mode_ap && (!WiFi.isConnected() || WiFi.localIP().toString() == "0.0.0.0")) return;
     } else {
         keepWifiConnected = true;
     }
