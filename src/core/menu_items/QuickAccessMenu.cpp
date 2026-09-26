@@ -229,7 +229,8 @@ void QuickAccessMenu::addFilesMenu() {
     }
 
     options.push_back({"Back", []() { returnToMenu = true; }});
-    loopOptions(options, MENU_TYPE_SUBMENU, "Select Source");
+    // Popup-box picker like the other file-source pickers (e.g. IR Custom).
+    loopOptions(options);
 }
 
 // ── Draw star icon ───────────────────────────────────────────────────────
