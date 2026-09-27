@@ -49,6 +49,7 @@ enum class SnifferMode : uint8_t {
     Full,
     HandshakesOnly,
     DeauthOnly,
+    Passive, // observe-only: analyze frames (client learning) but save nothing
 };
 
 extern int num_HS;
@@ -70,10 +71,24 @@ bool sniffer_is_handshake_ready(uint64_t bssidKey);
 bool sniffer_is_handshake_crackable(uint64_t key);
 // True while some (not yet usable) EAPOL was seen for this AP.
 bool sniffer_ap_has_partial(uint64_t key);
+// Number of distinct client MACs observed on an AP (0 when none known).
+uint16_t sniffer_count_clients(const uint8_t bssid[6]);
+// Total distinct clients observed across all APs (for live progress).
+uint32_t sniffer_total_clients();
 // Top active client MACs observed on an AP, sorted by frame count.
 // Returns number of entries written (0 when none known). Used to aim
 // deauth frames at real clients instead of broadcast.
 uint8_t sniffer_get_top_clients(uint64_t apKey, uint8_t out[][6], uint8_t maxOut);
+// Full client detail rows (MAC + last-seen IP + frame count), same sort order.
+struct ClientDetail {
+    uint8_t mac[6];
+    uint8_t ip[4];
+    uint32_t frames;
+};
+uint8_t sniffer_get_client_details(uint64_t apKey, ClientDetail *out, uint8_t maxOut);
+// Copy of the last raw beacon frame seen for an AP (for IE parsing: RSN,
+// WPS, ...). Returns bytes copied, 0 when none cached.
+uint16_t sniffer_get_beacon_frame(const uint8_t bssid[6], uint8_t *out, uint16_t outLen);
 
 extern std::set<BeaconList> registeredBeacons;
 extern std::set<String> SavedHS;
