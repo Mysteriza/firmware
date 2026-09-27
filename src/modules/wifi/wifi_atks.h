@@ -41,6 +41,21 @@ void wsl_bypasser_send_raw_frame(
     const wifi_ap_record_t *ap_record, uint8_t chan, const uint8_t target[6] = _default_target
 );
 
+/**
+ * @brief Send deauth frames aimed at one specific client of an AP
+ *
+ * Far more effective than broadcast deauths: the frames carry the real
+ * client MAC, so the target actually drops while the rest of the network
+ * is undisturbed. Falls back to broadcast when no client is known — callers
+ * should prefer this helper over raw broadcast whenever possible.
+ *
+ * @param apBssid  BSSID of the AP (forged source)
+ * @param client   MAC of the client to disconnect
+ * @param chan     Channel of the AP
+ * @param bursts   How many send_raw_frame bursts (3 air frames each)
+ */
+void sendTargetedDeauthFrame(const uint8_t apBssid[6], const uint8_t client[6], uint8_t chan, int bursts = 1);
+
 void wifi_atk_info(const String &tssid, const String &mac, uint8_t channel);
 
 void wifi_atk_menu();

