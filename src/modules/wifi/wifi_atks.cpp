@@ -707,8 +707,9 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
 
     esp_wifi_set_promiscuous(false);
     esp_wifi_set_promiscuous_rx_cb(NULL);
-    esp_wifi_stop();
-    delay(100);
+    // Full disconnect (not just esp_wifi_stop): clears the mode to OFF so the
+    // status-bar WiFi icon disappears instead of lingering while unconnected.
+    wifiDisconnect();
     returnToMenu = true;
 }
 #endif
