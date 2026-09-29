@@ -1,5 +1,4 @@
 #pragma once
-#if !defined(LITE_VERSION)
 #include <Arduino.h>
 #include <FS.h>
 #include <SD.h>
@@ -106,5 +105,3 @@ bool writeHeader(File file);
 void sniffer_setup();
 
 void sniffer(void *buf, wifi_promiscuous_pkt_type_t type);
-
-#endif
