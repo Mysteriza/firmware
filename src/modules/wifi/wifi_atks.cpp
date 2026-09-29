@@ -545,7 +545,6 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
     enum { SCANNING, MONITORING, CRACKABLE, CAPTURED } phase = SCANNING;
 
     bool needRedraw = true;
-    bool crackableAsked = false; // ask once when M1+M2 lands
     unsigned long lastEapolSeen = 0;
 
     auto sendDeauthBurst = [&]() {
@@ -601,18 +600,10 @@ void capture_handshake(const String &tssid, const String &mac, uint8_t channel) 
         if (handshakeUsable(hsTracker)) {
             phase = CAPTURED;
         } else if (handshakeCrackable(hsTracker)) {
+            // Crackable partial is already on disk (sniffer flushes M1+M2);
+            // keep capturing automatically until M3+M4 complete. No modal
+            // prompt here — it overlapped the capture screen.
             phase = CRACKABLE;
-            if (!crackableAsked) {
-                crackableAsked = true;
-                // Default button is "Keep going": a held SEL key must never
-                // accidentally stop the capture.
-                int8_t choice = displayMessage(
-                    "M1 + M2 captured\nHandshake is crackable now.\nKeep capturing M3 + M4?", "Keep going",
-                    nullptr, "Stop", bruceConfig.priColor
-                );
-                needRedraw = true;
-                if (choice == 1) break; // M1+M2 already on disk; user is done
-            }
         } else if (hsTracker.msg1 && phase == SCANNING) {
             phase = MONITORING;
         }
