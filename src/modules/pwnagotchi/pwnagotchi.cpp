@@ -95,7 +95,9 @@ struct BruceState {
 static bool channelHasPartial(uint8_t channel) {
     for (const auto &b : registeredBeacons) {
         if (b.channel != channel) continue;
-        if (sniffer_ap_has_partial(bruceMacToKey(b.MAC))) return true;
+        uint64_t k = bruceMacToKey(b.MAC);
+        if (sniffer_ap_has_partial(k)) return true;
+        if (sniffer_is_handshake_crackable(k) && !sniffer_is_handshake_ready(k)) return true;
     }
     return false;
 }
@@ -246,7 +248,7 @@ static void interactPhase(BruceState &s) {
 
                 uint64_t key = bruceMacToKey(beacon.MAC);
 
-                if (sniffer_is_handshake_ready(key)) {
+                if (sniffer_is_handshake_ready(key) || sniffer_is_handshake_crackable(key) || sniffer_ap_has_partial(key)) {
                     skipped++;
                     continue;
                 }

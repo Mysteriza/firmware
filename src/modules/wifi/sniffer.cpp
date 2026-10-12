@@ -130,6 +130,7 @@ struct Eapol4WayBuffer {
     EapolFrame m2;
     EapolFrame m3;
     bool m12Saved = false; // M1+M2 already flushed to disk (crackable partial)
+    bool m3Saved = false;
 };
 std::map<uint64_t, Eapol4WayBuffer> eapol4WayBuffer;
 
@@ -308,9 +309,25 @@ int classifyEapolMessage(const wifi_promiscuous_pkt_t *pkt) {
     bool secure = keyInfo & (1 << 9);
 
     if (ack && !mic && !install) return 1;            // Message 1
-    if (!ack && mic && !install && !secure) return 2; // Message 2
-    if (ack && mic && install) return 3;              // Message 3
-    if (!ack && mic && !install && secure) return 4;  // Message 4
+    if (ack && mic) return 3;                         // Message 3
+
+    if (!ack && mic && !install) {
+        // Frame is from Station to AP: either Message 2 or Message 4.
+        // In IEEE 802.11 / Wireshark dissector (packet-eapol.c):
+        // Key Data Length is at offset (keyInfoOffset + 92).
+        // Message 2 carries Client RSN/WPA IE -> Key Data Length > 0.
+        // Message 4 carries no Key Data -> Key Data Length == 0.
+        // Differentiating by Key Data Length avoids misclassifying M4 as M2
+        // when clients do not set the Secure bit in Message 4.
+        int keyDataLenOffset = keyInfoOffset + 92;
+        if (pkt->rx_ctrl.sig_len >= keyDataLenOffset + 2) {
+            uint16_t keyDataLen = (payload[keyDataLenOffset] << 8) | payload[keyDataLenOffset + 1];
+            if (keyDataLen == 0) return 4;            // Message 4
+            return 2;                                 // Message 2
+        }
+        if (secure) return 4;                         // Message 4 fallback
+        return 2;                                     // Message 2 fallback
+    }
 
     return -1; // Unknown
 }
@@ -466,7 +483,7 @@ void saveHandshake(const wifi_promiscuous_pkt_t *packet, bool beacon, FS &Fs, co
         return;
     }
 
-    // M3: buffer — don't write to file yet
+    // M3: buffer and append if partial was saved
     if (eapolMsg == 3) {
         if (!tracker.msg2 || tracker.msg3) { return; }
         tracker.msg3 = true;
@@ -475,12 +492,20 @@ void saveHandshake(const wifi_promiscuous_pkt_t *packet, bool beacon, FS &Fs, co
         buf.m3.timestamp_sec = packet->rx_ctrl.timestamp / 1000000;
         buf.m3.timestamp_usec = packet->rx_ctrl.timestamp % 1000000;
         hsLastActivity[apKey] = millis();
+        if (buf.m12Saved && !buf.m3Saved) {
+            File f = Fs.open(filePath, FILE_APPEND);
+            if (f) {
+                writeFrameToFile(f, buf.m3);
+                f.close();
+                buf.m3Saved = true;
+            }
+        }
         return;
     }
 
-    // M4: append M3+M4 (M1+M2 already on disk from the M2 flush), mark valid
+    // M4: append M3 (if not yet saved) + M4, mark valid
     if (eapolMsg == 4) {
-        if (!tracker.msg3 || tracker.msg4) { return; }
+        if (!tracker.msg2 || tracker.msg4) { return; }
         tracker.msg4 = true;
 
         if (!Fs.exists("/BrucePCAP")) { Fs.mkdir("/BrucePCAP"); }
@@ -505,7 +530,10 @@ void saveHandshake(const wifi_promiscuous_pkt_t *packet, bool beacon, FS &Fs, co
             writeFrameToFile(f, buf.m2);
         }
 
-        writeFrameToFile(f, buf.m3);
+        if (tracker.msg3 && !buf.m3Saved) {
+            writeFrameToFile(f, buf.m3);
+            buf.m3Saved = true;
+        }
 
         EapolFrame m4;
         m4.len = dataLen;

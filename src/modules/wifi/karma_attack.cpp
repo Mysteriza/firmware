@@ -1288,9 +1288,17 @@ int classifyEAPOLMessage(const wifi_promiscuous_pkt_t *pkt) {
     bool mic = keyInfo & (1 << 8);
     bool secure = keyInfo & (1 << 9);
     if (ack && !mic && !install) return 1;
-    if (!ack && mic && !install && !secure) return 2;
-    if (ack && mic && install) return 3;
-    if (!ack && mic && !install && secure) return 4;
+    if (ack && mic) return 3;
+    if (!ack && mic && !install) {
+        int keyDataLenOffset = keyInfoOffset + 92;
+        if (pkt->rx_ctrl.sig_len >= keyDataLenOffset + 2) {
+            uint16_t keyDataLen = (payload[keyDataLenOffset] << 8) | payload[keyDataLenOffset + 1];
+            if (keyDataLen == 0) return 4;
+            return 2;
+        }
+        if (secure) return 4;
+        return 2;
+    }
     return -1;
 }
 
