@@ -20,6 +20,7 @@
 #include "menu_items/RFMenu.h"
 #include "menu_items/ScriptsMenu.h"
 #include "menu_items/WifiMenu.h"
+#include "menu_items/WireToolsMenu.h"
 class MainMenu {
 public:
     FileMenu fileMenu;
@@ -40,6 +41,7 @@ public:
 #if !defined(LITE_VERSION)
     LoRaMenu loraMenu;
     EthernetMenu ethernetMenu;
+    WireToolsMenu wireToolsMenu;
 #endif
 
     MainMenu();

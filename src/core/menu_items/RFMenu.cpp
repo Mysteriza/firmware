@@ -26,7 +26,7 @@ void RFMenu::optionsMenu() {
         {"RSSI Spectrum",   rf_CC1101_rssi            }, // @Pirata
         {"SquareWave Spec", rf_SquareWave             }, // @Pirata
         {"Spectogram",      rf_waterfall              }, // dev_eclipse
-#if defined(BUZZ_PIN) or defined(HAS_NS4168_SPKR) and defined(RF_LISTEN_H)
+#if defined(RF_LISTEN_H)
         {"Listen",          rf_listen                 }, // dev_eclipse
 #endif
         {"Bruteforce",      rf_bruteforce             }, // dev_eclipse

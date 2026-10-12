@@ -13,7 +13,7 @@ MainMenu::MainMenu() {
 #if !defined(LITE_VERSION)
         &loraMenu,
 #endif
-#if defined(FM_SI4713) && !defined(LITE_VERSION)
+#if !defined(LITE_VERSION)
         &fmMenu,
 #endif
         &irMenu,
@@ -28,6 +28,9 @@ MainMenu::MainMenu() {
 #endif
         &clockMenu,
         &othersMenu,
+#if !defined(LITE_VERSION)
+        &wireToolsMenu,
+#endif
         &configMenu,
     };
 
@@ -213,11 +216,7 @@ void MainMenu::drawGrid(int index) {
         }
         drawMainBorder(false);
         tft.fillRect(
-            _grid.x,
-            _grid.y,
-            _grid.cols * _grid.cellW,
-            _grid.visibleRows * _grid.cellH,
-            bruceConfig.bgColor
+            _grid.x, _grid.y, _grid.cols * _grid.cellW, _grid.visibleRows * _grid.cellH, bruceConfig.bgColor
         );
         int first = _gridScroll * _grid.cols;
         int last = min(itemCount, first + _grid.visibleRows * _grid.cols);
@@ -261,9 +260,7 @@ void MainMenu::drawGridCell(int index, bool selected) {
 
     MenuItemInterface *item = static_cast<MenuItemInterface *>(options[index].hoverPointer);
     if (item)
-        item->drawIconInBox(
-            x + _grid.cellW / 2, y + 3 + _grid.iconBox / 2, _grid.iconBox, fgColor, bgColor
-        );
+        item->drawIconInBox(x + _grid.cellW / 2, y + 3 + _grid.iconBox / 2, _grid.iconBox, fgColor, bgColor);
 
     int maxChars = (_grid.cellW - 4) / (LW * _grid.labelSize);
     tft.setTextSize(_grid.labelSize);
@@ -310,7 +307,7 @@ bool MainMenu::handleGridPageTap(int x, int y, int currentIndex, int &newIndex) 
 
     int maxScroll = _grid.rows - _grid.visibleRows;
     int targetScroll = (y < zoneY + zoneH / 2) ? max(0, _gridScroll - _grid.visibleRows)
-                                                : min(maxScroll, _gridScroll + _grid.visibleRows);
+                                               : min(maxScroll, _gridScroll + _grid.visibleRows);
 
     // Keep the same column, jump to the first row of the new page.
     int col = currentIndex % _grid.cols;
