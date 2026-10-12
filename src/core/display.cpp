@@ -899,41 +899,61 @@ int loopOptions(
         } else
 #endif
         {
+            // One press = one step: consume the paired same-direction flag so a
+            // Prev+Up (or Next+Down) pair can never double-act across iterations.
+            // NOTE: UpPress is consumed by the condition below; when PrevPress alone
+            // triggers it, the stale UpPress is consumed inside the branch.
             if (PrevPress || check(UpPress)) {
+                bool hadPrev = PrevPress;
                 devModeCounter = 0;
 #ifdef HAS_KEYBOARD
                 check(PrevPress);
+                check(UpPress);
                 int prevEnabled = findNextEnabled(index, -1);
                 if (prevEnabled >= 0) index = prevEnabled;
                 redraw = true;
 #else
-                long _tmp = millis();
+                if (hadPrev) {
+                    long _tmp = millis();
 #ifndef HAS_ENCODER // T-Embed doesn't need it
-                LongPress = true;
-                while (PrevPress && menuType != MENU_TYPE_MAIN) {
-                    if (millis() - _tmp > 200)
-                        tft.drawArc(
-                            tftWidth / 2,
-                            tftHeight / 2,
-                            25,
-                            15,
-                            0,
-                            360 * (millis() - (_tmp + 200)) / 500,
-                            getColorVariation(bruceConfig.priColor),
-                            bruceConfig.bgColor
-                        );
-                    vTaskDelay(10 / portTICK_RATE_MS);
-                }
-                tft.drawArc(
-                    tftWidth / 2, tftHeight / 2, 25, 15, 0, 360, bruceConfig.bgColor, bruceConfig.bgColor
-                );
-                LongPress = false;
+                    LongPress = true;
+                    while (PrevPress && menuType != MENU_TYPE_MAIN) {
+                        if (millis() - _tmp > 200)
+                            tft.drawArc(
+                                tftWidth / 2,
+                                tftHeight / 2,
+                                25,
+                                15,
+                                0,
+                                360 * (millis() - (_tmp + 200)) / 500,
+                                getColorVariation(bruceConfig.priColor),
+                                bruceConfig.bgColor
+                            );
+                        vTaskDelay(10 / portTICK_RATE_MS);
+                    }
+                    tft.drawArc(
+                        tftWidth / 2, tftHeight / 2, 25, 15, 0, 360, bruceConfig.bgColor,
+                        bruceConfig.bgColor
+                    );
+                    LongPress = false;
 #endif
-                if (millis() - _tmp > 700) { // longpress detected to exit
-                    index = -1;
-                    break;
+                    if (millis() - _tmp > 700) { // longpress detected to exit
+                        index = -1;
+                        break;
+                    } else {
+                        check(PrevPress);
+                        check(UpPress); // paired step must not fire next iteration
+                        int prevEnabled = findNextEnabled(index, -1);
+                        if (prevEnabled >= 0) index = prevEnabled;
+                        redraw = true;
+                    }
                 } else {
-                    check(PrevPress);
+                    // Pure UP: single step only. Never opens the LongPress window:
+                    // while it is open the input task bypasses its 200 ms debounce
+                    // (see boards/reaper/interface.cpp) and re-arms UpPress mid-press,
+                    // turning one press into two steps. DownPress never had this window,
+                    // which is why only UP skipped.
+                    check(UpPress);
                     int prevEnabled = findNextEnabled(index, -1);
                     if (prevEnabled >= 0) index = prevEnabled;
                     redraw = true;
@@ -942,6 +962,8 @@ int loopOptions(
             }
             /* DW Btn to next item */
             if (check(NextPress) || check(DownPress)) {
+                check(NextPress);
+                check(DownPress); // paired step must not fire next iteration
                 int nextEnabled = findNextEnabled(index, +1);
                 if (nextEnabled >= 0) {
                     if (!bruceConfig.devMode && nextEnabled <= index) devModeCounter++;
