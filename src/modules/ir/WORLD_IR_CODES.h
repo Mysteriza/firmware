@@ -1,5 +1,5 @@
 /*
-Last Updated: 13/08/2026
+Last Updated: 12/10/2026
 By Ninja-jr
 Removed duplicate IR codes while preserving different formats/protocols
 Added universal power-off codes for multi-device support (parsed + raw)
