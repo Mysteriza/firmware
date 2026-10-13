@@ -15,6 +15,7 @@ void NRF24Menu::optionsMenu() {
     options.push_back({"MouseJack", nrf_mousejack});
 #endif
     options.push_back({"NRF Jammer", nrf_jammer});
+    options.push_back({"CH hopper", nrf_channel_hopper}); // upstream PR #2801
     options.push_back({"Sniffer/Record", nrf_sniffer});
 
     if (!bruceConfigPins.NRF24_presets.empty())
