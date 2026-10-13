@@ -202,6 +202,7 @@ struct BackgroundPortal {
     unsigned long launchTime;         // When portal was launched
     bool hasCreds;                    // Whether credentials captured
     String capturedPassword;          // Captured password if any
+    String capturedData;              // Submitted form as "name=value" pairs
     uint32_t clientFingerprint;       // Fingerprint of connected victim
     String capturedIdentifier;        // Username/identifier if captured
     bool targetEngaged;               // Whether target viewed the portal
@@ -398,7 +399,8 @@ bool isKarmaChannelValid(uint8_t channel);
 
 void karma_setup();
 void clearProbes();
-void saveProbesToFile(FS &fs, bool compressed);
+// Returns the path written, or "" if nothing could be saved.
+String saveProbesToFile(FS &fs, bool compressed);
 void sendProbeResponse(const String &ssid, const String &mac, uint8_t channel);
 void sendDeauth(const String &mac, uint8_t channel, bool broadcast);
 void launchManualEvilPortal(const String &ssid, uint8_t channel, bool verifyPwd);
@@ -428,8 +430,7 @@ void launchBackgroundPortal(
 void checkPortals();
 String generatePortalId(const String &templateName);
 void savePortalCredentials(
-    const String &ssid, const String &identifier, const String &password, const String &mac, uint8_t channel,
-    const String &templateName, const String &portalId
+    const String &ssid, const String &data, const String &mac, uint8_t channel, const String &portalId
 );
 String getDisplayName(const String &fullPath, bool isSD);
 void matchAPSignal(uint8_t channel);
